@@ -14,8 +14,9 @@ header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px 
 .seg{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
 .seg button{border:0;border-radius:0;background:none;padding:4px 10px;font-size:13px}
 .seg button.on{background:var(--acs);color:var(--ac)}
-nav{max-width:960px;margin:0 auto;padding:0 16px 10px;display:flex;gap:6px;overflow-x:auto;white-space:nowrap}
-nav button{padding:6px 12px;border-radius:999px;border:1px solid transparent;background:none}
+nav{max-width:960px;margin:0 auto;padding:0 16px 10px;display:flex;flex-wrap:wrap;gap:6px}
+@media(max-width:700px){nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}nav::-webkit-scrollbar{display:none}}
+nav button{padding:7px 14px;border-radius:999px;border:1px solid var(--bd);background:var(--bg);white-space:nowrap;font-size:14px}
 nav button:hover{background:var(--bg)}
 nav button.on{background:var(--ac);color:#fff}
 button{font:inherit;color:var(--fg);cursor:pointer;border:1px solid var(--bd);background:var(--card);border-radius:8px;padding:6px 12px}
@@ -43,7 +44,18 @@ tr:last-child td{border-bottom:0}
 .score{font-size:48px;font-weight:700;line-height:1}.score small{font-size:16px;font-weight:400;color:var(--mut)}
 .sp{display:inline-block;width:16px;height:16px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:r .7s linear infinite;vertical-align:-3px;margin-right:8px}
 @keyframes r{to{transform:rotate(360deg)}}
-.g rect{fill:var(--card);stroke:var(--bd)}.g line{stroke:var(--bd)}.g text{fill:var(--fg);font-size:11px}
+.g text{fill:var(--fg);font-size:11px}.g .s{font-size:9px;fill:var(--mut)}.g .t{font-weight:600}
+.g .n-h{fill:rgba(34,197,94,.15);stroke:#22c55e}.g .n-i{fill:rgba(139,92,246,.16);stroke:#8b5cf6}
+.g .n-m{fill:rgba(59,130,246,.16);stroke:#3b82f6}.g .n-r{fill:rgba(245,158,11,.22);stroke:#f59e0b}
+.g .box{fill:rgba(139,92,246,.05);stroke:var(--mut);stroke-dasharray:3 3}
+.g .hub{fill:var(--card);stroke:#22c55e;stroke-width:1.5}.g .hub.m{stroke:#3b82f6}
+.g path{fill:none;stroke-width:1;opacity:.5}.g .e-h{stroke:#22c55e}.g .e-m{stroke:#3b82f6}.g .e-r{stroke:#f59e0b}
+.leg{font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 5px 0 12px;vertical-align:-1px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}.grid2 .card{margin:0}
+.bar{display:grid;grid-template-columns:150px 1fr 28px;align-items:center;gap:8px;font-size:13px;margin:5px 0}
+.bar i{display:block;height:12px;border-radius:4px;background:var(--ac);opacity:.75}.bar b{text-align:right}
+.dl{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600;padding:8px 16px;margin-bottom:14px}
+.pill.mx{color:#3b82f6}
 a{color:var(--ac)}
 footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 </style></head>
@@ -72,22 +84,39 @@ const card=(t,h)=>`<div class="card"><h3>${esc(t)}</h3>${h}</div>`;
 const api=async(p,q={})=>{const r=await fetch('/api/'+p+'?'+new URLSearchParams(q));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed ('+r.status+')');return d};
 const flag=c=>c&&c.length===2?String.fromCodePoint(...[...c.toUpperCase()].map(x=>127397+x.charCodeAt())):'🌍';
 const cut=(s,n=30)=>String(s).length>n?String(s).slice(0,n-1)+'…':String(s);
-function graph(root,hosts,info){
- const hs=hosts.filter(x=>x.host!==root).slice(0,25);
- const rootIps=hosts.find(x=>x.host===root)?.ips||[];
- const ipList=[...new Set([...rootIps,...hs.flatMap(x=>x.ips)])].slice(0,15);
- const asnOrg={};ipList.forEach(ip=>{const i=info[ip];if(i?.asn)asnOrg[i.asn]=i.org});
- const cols=[[root],hs.map(x=>x.host),ipList,Object.keys(asnOrg)];
- const X=[10,170,400,610],W=190,H=Math.max(...cols.map(c=>c.length))*24+20;
- const y=(c,i)=>H/cols[c].length*(i+.5);
- let L='',N='';
- const edge=(a,i,b,j)=>{L+=`<line x1="${X[a]+W}" y1="${y(a,i)}" x2="${X[b]}" y2="${y(b,j)}"/>`};
- rootIps.forEach(ip=>{const j=ipList.indexOf(ip);if(j>=0)edge(0,0,2,j)});
- hs.forEach((x,i)=>{edge(0,0,1,i);x.ips.forEach(ip=>{const j=ipList.indexOf(ip);if(j>=0)edge(1,i,2,j)})});
- ipList.forEach((ip,j)=>{const a=info[ip]?.asn,k=cols[3].indexOf(a);if(k>=0)edge(2,j,3,k)});
- cols.forEach((c,ci)=>c.forEach((t,i)=>{const label=ci===3?t+' '+(asnOrg[t]||''):t;
-  N+=`<rect x="${X[ci]}" y="${y(ci,i)-10}" width="${W}" height="20" rx="4"/><text x="${X[ci]+6}" y="${y(ci,i)+4}">${esc(cut(label))}</text>`}));
- return `<div style="overflow-x:auto"><svg class="g" width="810" height="${H}" viewBox="0 0 810 ${H}">${L}${N}</svg></div><p class="mut">Left to right: website, its sub-sites, server addresses, hosting company.</p>`}
+function graph(root,hosts,mx,info,ips){
+ const hs=hosts.slice(0,26),RH=34,GP=30,X={h:200,i:520};
+ const groups={};ips.forEach(ip=>{const a=info[ip]?.asn||'Unknown';(groups[a]=groups[a]||[]).push(ip)});
+ let yy=14;const ipY={},boxes=[];
+ Object.entries(groups).forEach(([a,l])=>{const y0=yy;l.forEach(ip=>{ipY[ip]=yy+RH/2;yy+=RH});boxes.push({a,y0,y1:yy,org:info[l[0]]?.org||''});yy+=GP});
+ const yh=i=>20+i*30+13,ym=j=>20+hs.length*30+20+j*30+13;
+ const H=Math.max(yy,20+(hs.length+mx.length)*30+40,120);
+ const yA=hs.length?(yh(0)+yh(hs.length-1))/2:H/2,yM=mx.length?(ym(0)+ym(mx.length-1))/2:0,yR=mx.length?(yA+yM)/2:yA;
+ const cv=(x1,y1,x2,y2,c)=>`<path class="${c}" d="M${x1} ${y1}C${(x1+x2)/2} ${y1} ${(x1+x2)/2} ${y2} ${x2} ${y2}"/>`;
+ let E='',N='';
+ E+=cv(128,yR,148,yA,'e-r');if(mx.length)E+=cv(128,yR,148,yM,'e-r');
+ hs.forEach((x,i)=>{E+=cv(172,yA,X.h,yh(i),'e-h');x.ips.forEach(ip=>{if(ipY[ip]!=null)E+=cv(X.h+190,yh(i),X.i,ipY[ip],'e-h')})});
+ mx.forEach((m,j)=>{E+=cv(172,yM,X.h,ym(j),'e-m');m.ips.forEach(ip=>{if(ipY[ip]!=null)E+=cv(X.h+190,ym(j),X.i,ipY[ip],'e-m')})});
+ N+=`<rect class="n-r" x="8" y="${yR-13}" width="120" height="26" rx="5"/><text class="t" x="68" y="${yR+4}" text-anchor="middle">${esc(cut(root,18))}</text>`;
+ N+=`<circle class="hub" cx="160" cy="${yA}" r="12"/><text x="160" y="${yA+4}" text-anchor="middle">A</text>`;
+ if(mx.length)N+=`<circle class="hub m" cx="160" cy="${yM}" r="12"/><text x="160" y="${yM+4}" text-anchor="middle">MX</text>`;
+ hs.forEach((x,i)=>{N+=`<rect class="n-h" x="${X.h}" y="${yh(i)-11}" width="190" height="22" rx="4"/><text x="${X.h+6}" y="${yh(i)+4}">${esc(cut(x.host,31))}</text>`});
+ mx.forEach((m,j)=>{N+=`<rect class="n-m" x="${X.h}" y="${ym(j)-11}" width="190" height="22" rx="4"/><text x="${X.h+6}" y="${ym(j)+4}">${m.pref} ${esc(cut(m.host,27))}</text>`});
+ boxes.forEach(b=>{N+=`<rect class="box" x="508" y="${b.y0-4}" width="174" height="${b.y1-b.y0+6}" rx="8"/><text class="s" x="595" y="${b.y1+12}" text-anchor="middle">${esc(cut((b.a+' '+b.org).trim(),38))}</text>`});
+ ips.forEach(ip=>{if(ipY[ip]==null)return;N+=`<rect class="n-i" x="${X.i}" y="${ipY[ip]-14}" width="150" height="28" rx="4"/><text class="t" x="${X.i+75}" y="${ipY[ip]-2}" text-anchor="middle">${esc(ip)}</text><text class="s" x="${X.i+75}" y="${ipY[ip]+9}" text-anchor="middle">${esc(info[ip]?.route||'')}</text>`});
+ return `<p class="leg"><i style="background:#f59e0b"></i>Domain<i style="background:#22c55e"></i>Sub-sites (A)<i style="background:#3b82f6"></i>Mail servers (MX)<i style="background:#8b5cf6"></i>Server IPs, grouped by hosting network</p><div style="overflow-x:auto"><svg class="g" style="min-width:640px;width:100%;height:auto" viewBox="0 0 700 ${H}">${E}${N}</svg></div>`}
+const bars=m=>{const e=Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,6),top=e[0]?.[1]||1;
+ return e.length?e.map(([k,n])=>`<div class="bar"><span>${esc(cut(k,24))}</span><i style="width:${n/top*100}%"></i><b>${n}</b></div>`).join(''):'<span class="mut">No data</span>'};
+let LAST;
+const loadX=()=>window.XLSX?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=ok;s.onerror=no;document.head.append(s)});
+async function download(){if(!LAST)return;
+ const head=['Type','Priority','Host','IP','ASN','Provider','Country','Network type','Route'];
+ const data=LAST.rows.map(r=>[r.type,r.pref,r.host,r.ips.join(', '),r.asn,r.org,r.country,r.nettype,r.route]);
+ const name='domain-map-'+LAST.domain;
+ try{await loadX();const ws=XLSX.utils.aoa_to_sheet([head,...data]);ws['!cols']=[6,8,34,26,10,32,18,13,18].map(wch=>({wch}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Domain Map');XLSX.writeFile(wb,name+'.xlsx')}
+ catch{const csv=[head,...data].map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download=name+'.csv';a.click()}}
 const ECHO=['https://api.ipify.org?format=json','https://api64.ipify.org?format=json','https://icanhazip.com','https://ifconfig.me/ip','https://ipwho.is/','https://ipapi.co/json/','https://ipinfo.io/json','https://api.ip.sb/ip','https://1.1.1.1/cdn-cgi/trace','https://httpbin.org/ip'];
 
 // Anthropic Supported Regions Policy, effective Nov 12, 2026 (https://www.anthropic.com/legal/supported-regions)
@@ -127,14 +156,22 @@ const T={
     +card('Reachability from your browser',`<table><tr><td>claude.ai</td><td>${lt(l1)}</td></tr><tr><td>anthropic.com</td><td>${lt(l2)}</td></tr></table><p class="mut">Far from the US, 100 ms or more is normal.</p>`)
     +w+card('Your device',kv(dev))}},
  map:{i:'🗺️',label:'Domain Map',title:'Domain map',sub:'Find the hidden sub-sites and servers behind a website.',ph:'example.com',ex:['github.com','cloudflare.com'],
-  help:'Type a website name. We look for its <b>sub-sites</b> (like mail.example.com), the <b>server addresses</b> behind them, and <b>who hosts</b> them. The picture links them together so you can see the whole setup at a glance.',
+  help:'Type a website name. We find its <b>sub-sites</b> (like mail.example.com), the <b>server addresses</b> behind them and <b>who hosts</b> them. In the picture: <b style="color:#22c55e">green</b> = sub-sites, <b style="color:#3b82f6">blue</b> = mail servers, <b style="color:#8b5cf6">purple</b> = server IPs grouped in their hosting network. You can also download everything as an Excel file.',
   async run(v){
-   const d=await api('subs',{q:v});
-   const ips=[...new Set(d.hosts.flatMap(x=>x.ips))].slice(0,15),info={};
+   const d=await api('subs',{q:v}),mx=d.mx||[];
+   const ips=[...new Set([...d.hosts.flatMap(x=>x.ips),...mx.flatMap(m=>m.ips)])].slice(0,20),info={};
    await Promise.all(ips.map(async ip=>{try{info[ip]=await api('ipinfo',{q:ip})}catch{}}));
-   const rows=d.hosts.map(x=>{const i=info[x.ips[0]]||{};return `<tr><td>${esc(x.host)}</td><td>${esc(x.ips.join(', ')||'no A record')}</td><td class="mut">${esc([i.asn,i.org].filter(Boolean).join(' '))}</td></tr>`}).join('');
+   const rows=[...d.hosts.map(x=>({type:'A',pref:'',host:x.host,ips:x.ips})),...mx.map(m=>({type:'MX',pref:m.pref,host:m.host,ips:m.ips}))]
+    .map(r=>{const i=info[r.ips[0]]||{};return {...r,asn:i.asn||'',org:i.org||'',country:i.country||'',cc:i.country_code||'',route:i.route||'',nettype:i.network_type||''}});
+   LAST={domain:d.domain,rows};
+   const nets={},ctry={};
+   rows.forEach(r=>{if(r.asn){const k=r.asn+' '+r.org;nets[k]=(nets[k]||0)+1}if(r.country){const k=flag(r.cc)+' '+r.country;ctry[k]=(ctry[k]||0)+1}});
+   const tr=rows.map(r=>`<tr><td>${pill(r.type==='MX'?'mx':'ok',r.type)}</td><td>${esc(r.pref!==''?r.pref+' ':'')}${esc(r.host)}</td><td>${esc(r.ips.join(', ')||'no A record')}</td><td class="mut">${esc(r.asn)}</td><td class="mut">${esc(r.org)}</td><td class="mut">${esc(r.country)}</td></tr>`).join('');
    const note=d.total?`${d.total} names found in certificate logs; showing ${d.shown}.`:'No certificate records found (the source may be slow, try again).';
-   return card('Hosts',`<p class="mut">${esc(note)}</p><table>${rows}</table>`)+card('Relationship graph',graph(d.domain,d.hosts,info))}},
+   return `<button class="dl" id="dl">⬇ Download Excel (.xlsx)</button>`
+    +`<div class="grid2">${card('Hosting / networks',bars(nets))}${card('Server locations',bars(ctry))}</div>`
+    +card('Relationship graph',graph(d.domain,d.hosts,mx,info,ips))
+    +card('Hosts',`<p class="mut">${esc(note)}</p><table>${tr}</table>`)}},
  dns:{i:'📖',label:'DNS',title:'DNS records',sub:'The internet phonebook entries for a domain.',ph:'example.com',ex:['google.com','github.com'],
   help:'DNS turns a name like google.com into numbers computers use. <b>A</b> = IPv4 address, <b>AAAA</b> = IPv6 address, <b>MX</b> = mail servers, <b>NS</b> = who manages the name, <b>TXT</b> = notes (often email security), <b>CNAME</b> = alias, <b>SOA</b> = admin info, <b>CAA</b> = who may issue its security certificates.',
   async run(v){const d=await api('dns',{q:v});
@@ -201,7 +238,7 @@ function pick(id){if(!T[id])id='ip';cur=id;const t=T[id];
 Object.entries(T).forEach(([id,t])=>{const b=document.createElement('button');b.textContent=t.i+' '+t.label;b.dataset.id=id;b.onclick=()=>pick(id);nav.append(b)});
 f.onsubmit=e=>{e.preventDefault();if(q.value.trim()||T[cur].opt)go()};
 $('#ex').onclick=e=>{const b=e.target.closest('.chip');if(b){q.value=b.dataset.v;go()}};
-out.onclick=e=>{const b=e.target.closest('button'),ip=$('#bigip');if(!b||!ip)return;
+out.onclick=e=>{const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(!b||!ip)return;
  if(b.id==='cp'){try{navigator.clipboard.writeText(ip.textContent);b.textContent='Copied ✓'}catch{}}
  if(b.id==='hd'){ip.classList.toggle('blur');b.textContent=ip.classList.contains('blur')?'Show IP':'Hide IP'}};
 function theme(t){try{localStorage.setItem('th',t)}catch{}

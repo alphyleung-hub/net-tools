@@ -124,7 +124,19 @@ async function subs(q) {
       return { host, ips: ((await r.json()).Answer || []).filter(a => a.type === 1).map(a => a.data) };
     } catch { return { host, ips: [] }; }
   }));
-  return { domain: q, total: all.length, shown: list.length, hosts };
+  let mx = [];
+  try {
+    const dq = (n, t) => fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(n)}&type=${t}`,
+      { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(5000) }).then(r => r.json());
+    const rows = ((await dq(q, 'MX')).Answer || []).filter(a => a.type === 15)
+      .map(a => { const [pref, h] = a.data.split(' '); return { pref: +pref, host: (h || '').replace(/\.$/, '').toLowerCase() }; })
+      .filter(m => DOMAIN.test(m.host)).slice(0, 6);
+    mx = await Promise.all(rows.map(async m => {
+      try { return { ...m, ips: ((await dq(m.host, 'A')).Answer || []).filter(a => a.type === 1).map(a => a.data) }; }
+      catch { return { ...m, ips: [] }; }
+    }));
+  } catch {}
+  return { domain: q, total: all.length, shown: list.length, hosts, mx };
 }
 
 async function ipinfo(ip) {
