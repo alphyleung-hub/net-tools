@@ -1,41 +1,75 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Net Tools</title>
+<title>Net Tools - IP, DNS and network checks</title>
 <style>
-:root{--bg:#fff;--fg:#1a1d21;--mut:#667085;--card:#f5f7fa;--bd:#d0d5dd;--ac:#2563eb}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1318;--fg:#e6e9ee;--mut:#98a2b3;--card:#171c23;--bd:#2a313b;--ac:#60a5fa}}
+:root{--bg:#f4f6fa;--card:#fff;--fg:#1f2937;--mut:#6b7280;--bd:#e5e7eb;--ac:#2563eb;--acs:#eff4ff;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--sh:0 1px 3px rgba(16,24,40,.07)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0e1116;--card:#161b22;--fg:#e6edf3;--mut:#8b949e;--bd:#2a313b;--ac:#58a6ff;--acs:#12233a;--ok:#3fb950;--bad:#f85149;--warn:#e3a03a;--sh:none}}
+:root[data-theme=dark]{--bg:#0e1116;--card:#161b22;--fg:#e6edf3;--mut:#8b949e;--bd:#2a313b;--ac:#58a6ff;--acs:#12233a;--ok:#3fb950;--bad:#f85149;--warn:#e3a03a;--sh:none}
 *{box-sizing:border-box}[hidden]{display:none!important}
-body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
-main{max-width:860px;margin:0 auto;padding:20px 16px}
-h1{font-size:20px;margin:0 0 12px}
-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
-button{border:1px solid var(--bd);background:var(--card);color:var(--fg);padding:6px 12px;border-radius:8px;cursor:pointer;font:inherit}
-button.on,form button{background:var(--ac);border-color:var(--ac);color:#fff}
-form{display:flex;gap:8px;margin-bottom:12px}
-input{flex:1;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:12px;overflow-x:auto}
-.card h3{margin:0 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+body{margin:0;font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--bd)}
+.bar{max-width:960px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{font-weight:700;font-size:18px}.logo span{color:var(--ac)}
+.seg{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:none;padding:4px 10px;font-size:13px}
+.seg button.on{background:var(--acs);color:var(--ac)}
+nav{max-width:960px;margin:0 auto;padding:0 16px 10px;display:flex;gap:6px;overflow-x:auto;white-space:nowrap}
+nav button{padding:6px 12px;border-radius:999px;border:1px solid transparent;background:none}
+nav button:hover{background:var(--bg)}
+nav button.on{background:var(--ac);color:#fff}
+button{font:inherit;color:var(--fg);cursor:pointer;border:1px solid var(--bd);background:var(--card);border-radius:8px;padding:6px 12px}
+main{max-width:960px;margin:0 auto;padding:24px 16px 40px}
+h2{font-size:26px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 14px}
+.help{background:var(--acs);border:1px solid var(--bd);border-radius:12px;padding:10px 14px;margin-bottom:16px;font-size:14px}
+form{display:flex;gap:8px;margin-bottom:8px}
+input{flex:1;min-width:0;padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg);font:inherit}
+input:focus{outline:2px solid var(--ac);border-color:transparent}
+form button{background:var(--ac);border-color:var(--ac);color:#fff;padding:10px 22px;font-weight:600}
+.ex{margin-bottom:16px;font-size:13px;color:var(--mut)}
+.chip{padding:2px 10px;margin-left:6px;border-radius:999px;font-size:13px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh);overflow-x:auto}
+.card h3{margin:0 0 10px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 18px}
+.kv span{display:block;font-size:12px;color:var(--mut)}.kv b{font-weight:600;word-break:break-all}
+.ipcard{text-align:center;padding:26px 18px}
+.bigip{font-size:clamp(26px,6vw,42px);font-weight:700;letter-spacing:.5px;word-break:break-all;transition:filter .2s}
+.bigip.blur{filter:blur(10px)}.loc{margin:4px 0 14px;color:var(--mut)}.acts{display:flex;gap:8px;justify-content:center}
 table{border-collapse:collapse;width:100%}
-td{padding:3px 10px 3px 0;vertical-align:top;word-break:break-all}
-td:first-child{color:var(--mut);white-space:nowrap;width:1%}
-.mut{color:var(--mut)}.ok{color:#16a34a}.bad{color:#dc2626}
-.score{font-size:34px;font-weight:700}.score small{font-size:14px;font-weight:400;color:var(--mut)}
-.g rect{fill:var(--bg);stroke:var(--bd)}.g line{stroke:var(--bd)}.g text{fill:var(--fg);font-size:11px}
+td{padding:6px 12px 6px 0;vertical-align:top;word-break:break-all;border-bottom:1px solid var(--bd)}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block;padding:1px 10px;border-radius:999px;font-size:13px;font-weight:600;background:var(--bg)}
+.pill.ok,.ok{color:var(--ok)}.pill.bad,.bad{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut)}
+.score{font-size:48px;font-weight:700;line-height:1}.score small{font-size:16px;font-weight:400;color:var(--mut)}
+.sp{display:inline-block;width:16px;height:16px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:r .7s linear infinite;vertical-align:-3px;margin-right:8px}
+@keyframes r{to{transform:rotate(360deg)}}
+.g rect{fill:var(--card);stroke:var(--bd)}.g line{stroke:var(--bd)}.g text{fill:var(--fg);font-size:11px}
+footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 </style></head>
-<body><main>
-<h1>Net Tools</h1>
-<nav id="nav"></nav>
-<form id="f"><input id="q" autocomplete="off" spellcheck="false"><button>Go</button></form>
-<div id="out"></div>
+<body>
+<header>
+ <div class="bar"><div class="logo">Net<span>Tools</span></div>
+  <div class="seg" id="th"><button data-t="light" title="Light">☀️</button><button data-t="dark" title="Dark">🌙</button><button data-t="auto" title="Follow system">Auto</button></div></div>
+ <nav id="nav"></nav>
+</header>
+<main>
+ <h2 id="ttl"></h2><p class="sub" id="sub"></p>
+ <div class="help" id="help"></div>
+ <form id="f"><input id="q" autocomplete="off" spellcheck="false"><button>Check</button></form>
+ <div class="ex" id="ex"></div>
+ <div id="out"></div>
 </main>
+<footer>For testing only. Data from Cloudflare, ipapi.is, Globalping, crt.sh and RDAP.</footer>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const kv=o=>'<table>'+Object.entries(o).filter(([,v])=>v!=null&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(Array.isArray(v)?v.join(', '):v)}</td></tr>`).join('')+'</table>';
+const LAB={asn:'ASN',ip:'IP',tls:'TLS',http:'HTTP',cidr:'CIDR',loc:'Location',uag:'Browser',colo:'Datacenter'};
+const lab=k=>LAB[k]||(k.charAt(0).toUpperCase()+k.slice(1).replace(/_/g,' '));
+const val=v=>typeof v==='boolean'?(v?'Yes':'No'):Array.isArray(v)?v.join(', '):v;
+const kv=o=>'<div class="kv">'+Object.entries(o).filter(([,v])=>v!=null&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`<div><span>${esc(lab(k))}</span><b>${esc(val(v))}</b></div>`).join('')+'</div>';
 const card=(t,h)=>`<div class="card"><h3>${esc(t)}</h3>${h}</div>`;
 const api=async(p,q={})=>{const r=await fetch('/api/'+p+'?'+new URLSearchParams(q));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed ('+r.status+')');return d};
-
+const flag=c=>c&&c.length===2?String.fromCodePoint(...[...c.toUpperCase()].map(x=>127397+x.charCodeAt())):'🌍';
 const cut=(s,n=30)=>String(s).length>n?String(s).slice(0,n-1)+'…':String(s);
 function graph(root,hosts,info){
  const hs=hosts.filter(x=>x.host!==root).slice(0,25);
@@ -52,73 +86,100 @@ function graph(root,hosts,info){
  ipList.forEach((ip,j)=>{const a=info[ip]?.asn,k=cols[3].indexOf(a);if(k>=0)edge(2,j,3,k)});
  cols.forEach((c,ci)=>c.forEach((t,i)=>{const label=ci===3?t+' '+(asnOrg[t]||''):t;
   N+=`<rect x="${X[ci]}" y="${y(ci,i)-10}" width="${W}" height="20" rx="4"/><text x="${X[ci]+6}" y="${y(ci,i)+4}">${esc(cut(label))}</text>`}));
- return `<svg class="g" width="810" height="${H}" viewBox="0 0 810 ${H}">${L}${N}</svg>`}
+ return `<div style="overflow-x:auto"><svg class="g" width="810" height="${H}" viewBox="0 0 810 ${H}">${L}${N}</svg></div><p class="mut">Left to right: website, its sub-sites, server addresses, hosting company.</p>`}
 const ECHO=['https://api.ipify.org?format=json','https://api64.ipify.org?format=json','https://icanhazip.com','https://ifconfig.me/ip','https://ipwho.is/','https://ipapi.co/json/','https://ipinfo.io/json','https://api.ip.sb/ip','https://1.1.1.1/cdn-cgi/trace','https://httpbin.org/ip'];
 
-const tabs={
- ip:{label:'My IP',async run(){
-  const d=await api('ip');
-  let tr;
-  try{const r=await fetch('/cdn-cgi/trace');if(!r.ok)throw 0;
-   tr=kv(Object.fromEntries((await r.text()).trim().split('\n').map(l=>l.split('='))))}
-  catch{tr='<span class="mut">Only available on the deployed site.</span>'}
-  return card('Your IP',kv(d))+card('Cloudflare trace',tr)}},
- dns:{label:'DNS',ph:'example.com',async run(v){
-  const d=await api('dns',{q:v});
-  return Object.entries(d).map(([t,rows])=>card(t,rows.length?'<table>'+rows.map(r=>`<tr><td>${esc(r.ttl)}s</td><td>${esc(r.data)}</td></tr>`).join('')+'</table>':'<span class="mut">No records</span>')).join('')}},
- whois:{label:'Whois',ph:'example.com or 8.8.8.8',async run(v){return card('RDAP result',kv(await api('whois',{q:v})))}},
- status:{label:'Status',ph:'https://example.com (several allowed, space-separated)',async run(v){
-  const urls=v.split(/[\s,]+/).filter(Boolean).slice(0,10);
-  const rs=await Promise.all(urls.map(u=>api('status',{url:u}).catch(e=>({url:u,error:e.message}))));
-  return card('Results','<table>'+rs.map(r=>`<tr><td>${esc(r.url)}</td><td class="${r.ok?'ok':'bad'}">${esc(r.error||(r.status+' '+(r.statusText||'')))}</td><td>${r.ms!=null?r.ms+' ms':''}</td></tr>`).join('')+'</table>')}},
- map:{label:'Domain Map',ph:'example.com',async run(v){
-  const d=await api('subs',{q:v});
-  const ips=[...new Set(d.hosts.flatMap(x=>x.ips))].slice(0,15),info={};
-  await Promise.all(ips.map(async ip=>{try{info[ip]=await api('ipinfo',{q:ip})}catch{}}));
-  const rows=d.hosts.map(x=>{const i=info[x.ips[0]]||{};return `<tr><td>${esc(x.host)}</td><td>${esc(x.ips.join(', ')||'no A record')}</td><td>${esc([i.asn,i.org].filter(Boolean).join(' '))}</td></tr>`}).join('');
-  const note=d.total?`${d.total} names in certificate logs; showing ${d.shown}.`:'No certificate records found (the source may be slow; try again).';
-  return card('Hosts',`<p class="mut">${esc(note)}</p><table>${rows}</table>`)+card('Relationship graph',graph(d.domain,d.hosts,info))}},
- score:{label:'IP Score',ph:'IP address (blank = your IP)',opt:1,async run(v){
-  const {score,...rest}=await api('ipinfo',v?{q:v}:{});
-  return card('Score (heuristic)',`<div class="score ${score>=80?'ok':score>=50?'':'bad'}">${score}<small>/100</small></div>`)+card('Details',kv(rest))}},
- ping:{label:'Ping',ph:'example.com or 1.1.1.1',async run(v){
-  const d=await api('ping',{q:v});
-  const rows=d.probes.sort((a,b)=>(a.avg??1e9)-(b.avg??1e9)).map(p=>`<tr><td>${esc(p.city)}, ${esc(p.country)}</td><td>${esc(p.network)}</td><td class="${p.avg!=null?'ok':'bad'}">${p.avg!=null?p.avg+' ms':'failed'}</td><td>${p.loss!=null?p.loss+'% loss':''}</td></tr>`).join('');
-  return card('Ping from '+d.probes.length+' locations',`<table>${rows}</table>`)}},
- split:{label:'Split Test',async run(){
-  const rs=await Promise.all(ECHO.map(async u=>{const h=new URL(u).hostname;
-   try{const r=await fetch(u,{signal:AbortSignal.timeout(6000)});
-    const m=(await r.text()).match(/\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}/i);return{h,ip:m&&m[0]}}catch{return{h}}}));
-  const cnt={};rs.forEach(r=>{if(r.ip)cnt[r.ip]=(cnt[r.ip]||0)+1});
-  const top={};Object.entries(cnt).forEach(([ip,n])=>{const f=ip.includes(':')?6:4;if(!top[f]||n>cnt[top[f]])top[f]=ip});
-  const v4=new Set(rs.filter(r=>r.ip&&!r.ip.includes(':')).map(r=>r.ip)).size;
-  const rows=rs.map(r=>{const odd=r.ip&&r.ip!==top[r.ip.includes(':')?6:4];
-   return `<tr><td>${esc(r.h)}</td><td>${esc(r.ip||'')}</td><td class="${r.ip?(odd?'bad':'ok'):'mut'}">${r.ip?(odd?'different exit':'main exit'):'blocked / failed'}</td></tr>`}).join('');
-  return card('Summary',v4>1?`<span class="bad">${v4} different IPv4 exit addresses: traffic is being split.</span>`:'<span class="ok">All reachable sites see the same IPv4 address.</span>')+card('Exit IP by site',`<table>${rows}</table>`)}},
- webrtc:{label:'WebRTC',run:()=>new Promise(res=>{
-  const found=new Map(),pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  let fin=false;
-  const done=async()=>{if(fin)return;fin=true;pc.close();
-   let pub='';try{pub=(await api('ip')).ip}catch{}
-   const pubs=[...found].filter(([,t])=>t==='srflx').map(([a])=>a);
-   const leak=pubs.some(a=>a!==pub);
-   const verdict=!pubs.length?'<span class="ok">No public IP exposed via WebRTC.</span>'
-    :leak?'<span class="bad">WebRTC shows a public IP different from the one websites see (could be IPv6 or a leak).</span>'
-    :'<span class="ok">No leak: WebRTC IP matches your public IP.</span>';
-   res(card('Verdict',verdict+`<p class="mut">Server sees: ${esc(pub||'unknown')}</p>`)+
-    card('ICE candidates',found.size?'<table>'+[...found].map(([a,t])=>`<tr><td>${esc(t)}</td><td>${esc(a)}</td></tr>`).join('')+'</table>':'<span class="mut">None found (WebRTC may be blocked).</span>'))};
-  pc.onicecandidate=e=>{if(!e.candidate)return done();const p=e.candidate.candidate.split(' ');found.set(p[4],p[7])};
-  pc.createDataChannel('x');pc.createOffer().then(o=>pc.setLocalDescription(o));
-  setTimeout(done,5000)})}
+const T={
+ ip:{i:'🌐',label:'My IP',title:'What is my IP address?',sub:'See the address websites see, and roughly where it is.',
+  help:'Your <b>IP address</b> is like your home address on the internet. Websites use it to guess where you are. Using a VPN? Check here that it shows the VPN address and not your own. Press <b>Hide IP</b> before taking a screenshot.',
+  async run(){
+   const d=await api('ip');let tr;
+   try{const r=await fetch('/cdn-cgi/trace');if(!r.ok)throw 0;tr=kv(Object.fromEntries((await r.text()).trim().split('\n').map(l=>l.split('='))))}
+   catch{tr='<span class="mut">Only available on the deployed site.</span>'}
+   const {ip,country,city,region,...rest}=d;
+   return `<div class="card ipcard"><div class="mut">Your public IP address</div><div class="bigip" id="bigip">${esc(ip||'Unknown')}</div><div class="loc">${flag(country)} ${esc([city,region,country].filter(Boolean).join(', ')||'Location unknown')}</div><div class="acts"><button id="cp">Copy</button><button id="hd">Hide IP</button></div></div>`+card('Network details',kv(rest))+card('Cloudflare trace',tr)}},
+ map:{i:'🗺️',label:'Domain Map',title:'Domain map',sub:'Find the hidden sub-sites and servers behind a website.',ph:'example.com',ex:['github.com','cloudflare.com'],
+  help:'Type a website name. We look for its <b>sub-sites</b> (like mail.example.com), the <b>server addresses</b> behind them, and <b>who hosts</b> them. The picture links them together so you can see the whole setup at a glance.',
+  async run(v){
+   const d=await api('subs',{q:v});
+   const ips=[...new Set(d.hosts.flatMap(x=>x.ips))].slice(0,15),info={};
+   await Promise.all(ips.map(async ip=>{try{info[ip]=await api('ipinfo',{q:ip})}catch{}}));
+   const rows=d.hosts.map(x=>{const i=info[x.ips[0]]||{};return `<tr><td>${esc(x.host)}</td><td>${esc(x.ips.join(', ')||'no A record')}</td><td class="mut">${esc([i.asn,i.org].filter(Boolean).join(' '))}</td></tr>`}).join('');
+   const note=d.total?`${d.total} names found in certificate logs; showing ${d.shown}.`:'No certificate records found (the source may be slow, try again).';
+   return card('Hosts',`<p class="mut">${esc(note)}</p><table>${rows}</table>`)+card('Relationship graph',graph(d.domain,d.hosts,info))}},
+ dns:{i:'📖',label:'DNS',title:'DNS records',sub:'The internet phonebook entries for a domain.',ph:'example.com',ex:['google.com','github.com'],
+  help:'DNS turns a name like google.com into numbers computers use. <b>A</b> = IPv4 address, <b>AAAA</b> = IPv6 address, <b>MX</b> = mail servers, <b>NS</b> = who manages the name, <b>TXT</b> = notes (often email security), <b>CNAME</b> = alias, <b>SOA</b> = admin info, <b>CAA</b> = who may issue its security certificates.',
+  async run(v){const d=await api('dns',{q:v});
+   return Object.entries(d).map(([t,rows])=>card(t,rows.length?'<table>'+rows.map(r=>`<tr><td class="mut" style="width:1%;white-space:nowrap">${esc(r.ttl)}s</td><td>${esc(r.data)}</td></tr>`).join('')+'</table>':'<span class="mut">No records</span>')).join('')}},
+ whois:{i:'🔎',label:'Whois',title:'Whois lookup',sub:'Who owns a domain or an IP address.',ph:'example.com or 8.8.8.8',ex:['google.com','8.8.8.8'],
+  help:'Shows who registered a domain, when it was created and when it expires. Type an <b>IP address</b> instead to see who owns that block of addresses. Personal details are usually hidden for privacy.',
+  async run(v){return card('Result',kv(await api('whois',{q:v})))}},
+ score:{i:'🛡️',label:'IP Score',title:'IP score',sub:'How trustworthy does an IP address look?',ph:'IP address (leave blank for yours)',opt:1,ex:['8.8.8.8','1.1.1.1'],
+  help:'Gives an IP a score from 0 to 100. <b>High = clean.</b> The score drops if the IP looks like a VPN, proxy, Tor, a datacenter, or has abuse reports. Leave the box empty and press Check to test your own IP. This is a simple estimate, not an official rating.',
+  async run(v){const {score,...rest}=await api('ipinfo',v?{q:v}:{});
+   const c=score>=80?'ok':score>=50?'warn':'bad',w=score>=80?'Looks clean':score>=50?'Some risk':'High risk';
+   return card('Score',`<div class="score ${c}">${score}<small>/100</small></div><p class="${c}"><b>${w}</b></p>`)+card('Details',kv(rest))}},
+ ping:{i:'📡',label:'Ping',title:'Global ping',sub:'How fast does a site answer from around the world?',ph:'example.com or 1.1.1.1',ex:['google.com','cloudflare.com'],
+  help:'We ask 10 computers in different countries to contact the site. <b>Lower ms is faster</b> (under 100 ms is great). <b>Failed</b> means that location could not reach it. This takes a few seconds.',
+  async run(v){const d=await api('ping',{q:v});
+   const rows=d.probes.sort((a,b)=>(a.avg??1e9)-(b.avg??1e9)).map(p=>{const c=p.avg==null?'bad':p.avg<100?'ok':p.avg<250?'warn':'bad';
+    return `<tr><td>${esc(p.city)}, ${esc(p.country)}</td><td class="mut">${esc(p.network)}</td><td class="${c}"><b>${p.avg!=null?p.avg+' ms':'failed'}</b></td><td class="mut">${p.loss!=null?p.loss+'% loss':''}</td></tr>`}).join('');
+   return card('Ping from '+d.probes.length+' locations',`<table>${rows}</table>`)}},
+ split:{i:'🔀',label:'Split Test',title:'Split-route test',sub:'Do different websites see different IP addresses from you?',
+  help:'Some VPN or proxy setups send some websites through a different route. We ask 10 sites what IP they see. <b>All the same</b> = one route. <b>Different</b> = your traffic is split. "Blocked" just means that site does not allow this test.',
+  async run(){
+   const rs=await Promise.all(ECHO.map(async u=>{const h=new URL(u).hostname;
+    try{const r=await fetch(u,{signal:AbortSignal.timeout(6000)});
+     const m=(await r.text()).match(/\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}/i);return{h,ip:m&&m[0]}}catch{return{h}}}));
+   const cnt={};rs.forEach(r=>{if(r.ip)cnt[r.ip]=(cnt[r.ip]||0)+1});
+   const top={};Object.entries(cnt).forEach(([ip,n])=>{const f=ip.includes(':')?6:4;if(!top[f]||n>cnt[top[f]])top[f]=ip});
+   const v4=new Set(rs.filter(r=>r.ip&&!r.ip.includes(':')).map(r=>r.ip)).size;
+   const rows=rs.map(r=>{const odd=r.ip&&r.ip!==top[r.ip.includes(':')?6:4];
+    return `<tr><td>${esc(r.h)}</td><td>${esc(r.ip||'')}</td><td><span class="pill ${r.ip?(odd?'bad':'ok'):'mut'}">${r.ip?(odd?'different exit':'main exit'):'blocked / failed'}</span></td></tr>`}).join('');
+   return card('Summary',v4>1?`<b class="bad">${v4} different IPv4 addresses seen: your traffic is being split.</b>`:'<b class="ok">All reachable sites see the same IPv4 address.</b>')+card('IP seen by each site',`<table>${rows}</table>`)}},
+ status:{i:'✅',label:'Status',title:'Website status',sub:'Is a website up and how fast does it reply?',ph:'https://example.com (several allowed, separated by spaces)',ex:['google.com github.com cloudflare.com'],
+  help:'Checks if websites are online. <b>200</b> = working, <b>301/302</b> = redirected, <b>404</b> = page not found, <b>500+</b> = server problem. You can check up to 10 at once.',
+  async run(v){const urls=v.split(/[\s,]+/).filter(Boolean).slice(0,10);
+   const rs=await Promise.all(urls.map(u=>api('status',{url:u}).catch(e=>({url:u,error:e.message}))));
+   return card('Results','<table>'+rs.map(r=>`<tr><td>${esc(r.url)}</td><td><span class="pill ${r.ok?'ok':'bad'}">${esc(r.error||(r.status+' '+(r.statusText||'')))}</span></td><td class="mut">${r.ms!=null?r.ms+' ms':''}</td></tr>`).join('')+'</table>')}},
+ webrtc:{i:'🔒',label:'WebRTC',title:'WebRTC leak test',sub:'Is your browser leaking your real IP?',
+  help:'WebRTC is a browser feature for calls and video. It can sometimes <b>reveal your real IP even when you use a VPN</b>. We check if that is happening. A green result means you are fine.',
+  run:()=>new Promise(res=>{
+   const found=new Map(),pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+   let fin=false;
+   const done=async()=>{if(fin)return;fin=true;pc.close();
+    let pub='';try{pub=(await api('ip')).ip}catch{}
+    const pubs=[...found].filter(([,t])=>t==='srflx').map(([a])=>a);
+    const leak=pubs.some(a=>a!==pub);
+    const verdict=!pubs.length?'<b class="ok">No public IP exposed via WebRTC.</b>'
+     :leak?'<b class="bad">WebRTC shows a public IP different from the one websites see (could be IPv6 or a leak).</b>'
+     :'<b class="ok">No leak: WebRTC IP matches your public IP.</b>';
+    res(card('Verdict',verdict+`<p class="mut">Websites see: ${esc(pub||'unknown')}</p>`)+
+     card('Addresses found',found.size?'<table>'+[...found].map(([a,t])=>`<tr><td class="mut">${esc(t)}</td><td>${esc(a)}</td></tr>`).join('')+'</table>':'<span class="mut">None found (WebRTC may be blocked).</span>'))};
+   pc.onicecandidate=e=>{if(!e.candidate)return done();const p=e.candidate.candidate.split(' ');found.set(p[4],p[7])};
+   pc.createDataChannel('x');pc.createOffer().then(o=>pc.setLocalDescription(o));
+   setTimeout(done,5000)})}
 };
 
 const nav=$('#nav'),f=$('#f'),q=$('#q'),out=$('#out');let cur;
-async function go(){out.innerHTML='<div class="card mut">Loading…</div>';
- try{out.innerHTML=await tabs[cur].run(q.value.trim())}catch(e){out.innerHTML=card('Error',`<span class="bad">${esc(e.message)}</span>`)}}
-function pick(id){cur=id;const t=tabs[id];
+async function go(){out.innerHTML='<div class="card mut"><span class="sp"></span>Checking…</div>';
+ try{out.innerHTML=await T[cur].run(q.value.trim())}catch(e){out.innerHTML=card('Error',`<b class="bad">${esc(e.message)}</b>`)}}
+function pick(id){if(!T[id])id='ip';cur=id;const t=T[id];
  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
- f.hidden=!t.ph;q.placeholder=t.ph||'';q.value='';out.innerHTML='';if(!t.ph)go()}
-Object.entries(tabs).forEach(([id,t])=>{const b=document.createElement('button');b.textContent=t.label;b.dataset.id=id;b.onclick=()=>pick(id);nav.append(b)});
-f.onsubmit=e=>{e.preventDefault();if(q.value.trim()||tabs[cur].opt)go()};
-pick('ip');
+ $('#ttl').textContent=t.title;$('#sub').textContent=t.sub;$('#help').innerHTML='💡 '+t.help;
+ f.hidden=!t.ph;$('#ex').hidden=!t.ex;q.placeholder=t.ph||'';q.value='';out.innerHTML='';
+ $('#ex').innerHTML=t.ex?'Try:'+t.ex.map(x=>`<button class="chip" data-v="${esc(x)}">${esc(x)}</button>`).join(''):'';
+ history.replaceState(null,'','#'+id);if(!t.ph)go()}
+Object.entries(T).forEach(([id,t])=>{const b=document.createElement('button');b.textContent=t.i+' '+t.label;b.dataset.id=id;b.onclick=()=>pick(id);nav.append(b)});
+f.onsubmit=e=>{e.preventDefault();if(q.value.trim()||T[cur].opt)go()};
+$('#ex').onclick=e=>{const b=e.target.closest('.chip');if(b){q.value=b.dataset.v;go()}};
+out.onclick=e=>{const b=e.target.closest('button'),ip=$('#bigip');if(!b||!ip)return;
+ if(b.id==='cp'){try{navigator.clipboard.writeText(ip.textContent);b.textContent='Copied ✓'}catch{}}
+ if(b.id==='hd'){ip.classList.toggle('blur');b.textContent=ip.classList.contains('blur')?'Show IP':'Hide IP'}};
+function theme(t){try{localStorage.setItem('th',t)}catch{}
+ const r=document.documentElement;t==='auto'?r.removeAttribute('data-theme'):r.dataset.theme=t;
+ document.querySelectorAll('#th button').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
+$('#th').onclick=e=>{const b=e.target.closest('button');if(b)theme(b.dataset.t)};
+let saved='auto';try{saved=localStorage.getItem('th')||'auto'}catch{}
+theme(saved);pick(location.hash.slice(1));
 </script></body></html>
