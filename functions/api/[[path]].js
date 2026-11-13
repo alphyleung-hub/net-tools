@@ -102,6 +102,71 @@ async function status(raw) {
   }
 }
 
+async function subs(q) {
+  const names = new Set([q]);
+  try {
+    const r = await fetch(`https://crt.sh/?q=%25.${encodeURIComponent(q)}&output=json&exclude=expired`, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw 0;
+    for (const c of await r.json()) for (const n of String(c.name_value).split('\n')) names.add(n);
+  } catch {
+    try {
+      const r = await fetch(`https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(q)}&include_subdomains=true&expand=dns_names`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) for (const c of await r.json()) for (const n of c.dns_names || []) names.add(n);
+    } catch {}
+  }
+  const all = [...new Set([...names].map(n => n.toLowerCase().replace(/^\*\./, ''))
+    .filter(n => DOMAIN.test(n) && (n === q || n.endsWith('.' + q))))].sort();
+  const list = [q, ...all.filter(n => n !== q)].slice(0, 30); // free plan allows ~50 subrequests
+  const hosts = await Promise.all(list.map(async host => {
+    try {
+      const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`,
+        { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(5000) });
+      return { host, ips: ((await r.json()).Answer || []).filter(a => a.type === 1).map(a => a.data) };
+    } catch { return { host, ips: [] }; }
+  }));
+  return { domain: q, total: all.length, shown: list.length, hosts };
+}
+
+async function ipinfo(ip) {
+  try {
+    const r = await fetch(`https://api.ipapi.is/?q=${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return [{ error: `IP lookup failed (${r.status})` }, 502];
+    const d = await r.json();
+    if (d.error) return [{ error: String(d.error) }, 502];
+    const a = d.asn || {}, c = d.company || {}, l = d.location || {};
+    const pen = { is_abuser: 40, is_tor: 30, is_vpn: 20, is_proxy: 20, is_datacenter: 10 };
+    const score = Math.max(0, 100 - Object.entries(pen).reduce((t, [k, v]) => t + (d[k] ? v : 0), 0));
+    return [{
+      ip: d.ip || ip, score, asn: a.asn ? 'AS' + a.asn : undefined, org: a.org || c.name, route: a.route,
+      network_type: a.type || c.type, country: l.country, city: l.city,
+      datacenter: !!d.is_datacenter, vpn: !!d.is_vpn, proxy: !!d.is_proxy, tor: !!d.is_tor, abuser: !!d.is_abuser,
+      abuse_score: c.abuser_score,
+    }, 200];
+  } catch { return [{ error: 'IP lookup unavailable' }, 502]; }
+}
+
+async function ping(target) {
+  if (!(DOMAIN.test(target) || IPV4.test(target)) || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(target))
+    return [{ error: 'Enter a valid public domain or IPv4' }, 400];
+  const r = await fetch('https://api.globalping.io/v1/measurements', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'ping', target, limit: 10, locations: [{ magic: 'world' }] }),
+  });
+  if (!r.ok) return [{ error: `Globalping error (${r.status})` }, 502];
+  const { id } = await r.json();
+  for (let i = 0; i < 8; i++) {
+    await new Promise(res => setTimeout(res, 1000));
+    const m = await (await fetch(`https://api.globalping.io/v1/measurements/${id}`)).json();
+    if (m.status === 'finished') {
+      return [{ target, probes: (m.results || []).map(x => ({
+        city: x.probe?.city, country: x.probe?.country, network: x.probe?.network,
+        status: x.result?.status, avg: x.result?.stats?.avg, min: x.result?.stats?.min, loss: x.result?.stats?.loss,
+      })) }, 200];
+    }
+  }
+  return [{ error: 'Timed out waiting for probes' }, 504];
+}
+
 export async function onRequestGet({ request, params }) {
   const url = new URL(request.url);
   const route = [].concat(params.path || [])[0];
@@ -124,5 +189,15 @@ export async function onRequestGet({ request, params }) {
     const raw = (url.searchParams.get('url') || '').trim();
     const [d, s] = await status(raw); return json(d, s);
   }
+  if (route === 'subs') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    return json(await subs(q));
+  }
+  if (route === 'ipinfo') {
+    const ip = q || request.headers.get('CF-Connecting-IP') || '';
+    if (!(IPV4.test(ip) || (ip.includes(':') && IPV6.test(ip)))) return json({ error: 'Enter a valid IP address' }, 400);
+    const [d, st] = await ipinfo(ip); return json(d, st);
+  }
+  if (route === 'ping') { const [d, st] = await ping(q); return json(d, st); }
   return json({ error: 'Not found' }, 404);
 }

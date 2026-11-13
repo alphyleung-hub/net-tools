@@ -20,6 +20,8 @@ table{border-collapse:collapse;width:100%}
 td{padding:3px 10px 3px 0;vertical-align:top;word-break:break-all}
 td:first-child{color:var(--mut);white-space:nowrap;width:1%}
 .mut{color:var(--mut)}.ok{color:#16a34a}.bad{color:#dc2626}
+.score{font-size:34px;font-weight:700}.score small{font-size:14px;font-weight:400;color:var(--mut)}
+.g rect{fill:var(--bg);stroke:var(--bd)}.g line{stroke:var(--bd)}.g text{fill:var(--fg);font-size:11px}
 </style></head>
 <body><main>
 <h1>Net Tools</h1>
@@ -33,6 +35,25 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const kv=o=>'<table>'+Object.entries(o).filter(([,v])=>v!=null&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(Array.isArray(v)?v.join(', '):v)}</td></tr>`).join('')+'</table>';
 const card=(t,h)=>`<div class="card"><h3>${esc(t)}</h3>${h}</div>`;
 const api=async(p,q={})=>{const r=await fetch('/api/'+p+'?'+new URLSearchParams(q));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed ('+r.status+')');return d};
+
+const cut=(s,n=30)=>String(s).length>n?String(s).slice(0,n-1)+'…':String(s);
+function graph(root,hosts,info){
+ const hs=hosts.filter(x=>x.host!==root).slice(0,25);
+ const rootIps=hosts.find(x=>x.host===root)?.ips||[];
+ const ipList=[...new Set([...rootIps,...hs.flatMap(x=>x.ips)])].slice(0,15);
+ const asnOrg={};ipList.forEach(ip=>{const i=info[ip];if(i?.asn)asnOrg[i.asn]=i.org});
+ const cols=[[root],hs.map(x=>x.host),ipList,Object.keys(asnOrg)];
+ const X=[10,170,400,610],W=190,H=Math.max(...cols.map(c=>c.length))*24+20;
+ const y=(c,i)=>H/cols[c].length*(i+.5);
+ let L='',N='';
+ const edge=(a,i,b,j)=>{L+=`<line x1="${X[a]+W}" y1="${y(a,i)}" x2="${X[b]}" y2="${y(b,j)}"/>`};
+ rootIps.forEach(ip=>{const j=ipList.indexOf(ip);if(j>=0)edge(0,0,2,j)});
+ hs.forEach((x,i)=>{edge(0,0,1,i);x.ips.forEach(ip=>{const j=ipList.indexOf(ip);if(j>=0)edge(1,i,2,j)})});
+ ipList.forEach((ip,j)=>{const a=info[ip]?.asn,k=cols[3].indexOf(a);if(k>=0)edge(2,j,3,k)});
+ cols.forEach((c,ci)=>c.forEach((t,i)=>{const label=ci===3?t+' '+(asnOrg[t]||''):t;
+  N+=`<rect x="${X[ci]}" y="${y(ci,i)-10}" width="${W}" height="20" rx="4"/><text x="${X[ci]+6}" y="${y(ci,i)+4}">${esc(cut(label))}</text>`}));
+ return `<svg class="g" width="810" height="${H}" viewBox="0 0 810 ${H}">${L}${N}</svg>`}
+const ECHO=['https://api.ipify.org?format=json','https://api64.ipify.org?format=json','https://icanhazip.com','https://ifconfig.me/ip','https://ipwho.is/','https://ipapi.co/json/','https://ipinfo.io/json','https://api.ip.sb/ip','https://1.1.1.1/cdn-cgi/trace','https://httpbin.org/ip'];
 
 const tabs={
  ip:{label:'My IP',async run(){
@@ -50,6 +71,30 @@ const tabs={
   const urls=v.split(/[\s,]+/).filter(Boolean).slice(0,10);
   const rs=await Promise.all(urls.map(u=>api('status',{url:u}).catch(e=>({url:u,error:e.message}))));
   return card('Results','<table>'+rs.map(r=>`<tr><td>${esc(r.url)}</td><td class="${r.ok?'ok':'bad'}">${esc(r.error||(r.status+' '+(r.statusText||'')))}</td><td>${r.ms!=null?r.ms+' ms':''}</td></tr>`).join('')+'</table>')}},
+ map:{label:'Domain Map',ph:'example.com',async run(v){
+  const d=await api('subs',{q:v});
+  const ips=[...new Set(d.hosts.flatMap(x=>x.ips))].slice(0,15),info={};
+  await Promise.all(ips.map(async ip=>{try{info[ip]=await api('ipinfo',{q:ip})}catch{}}));
+  const rows=d.hosts.map(x=>{const i=info[x.ips[0]]||{};return `<tr><td>${esc(x.host)}</td><td>${esc(x.ips.join(', ')||'no A record')}</td><td>${esc([i.asn,i.org].filter(Boolean).join(' '))}</td></tr>`}).join('');
+  const note=d.total?`${d.total} names in certificate logs; showing ${d.shown}.`:'No certificate records found (the source may be slow; try again).';
+  return card('Hosts',`<p class="mut">${esc(note)}</p><table>${rows}</table>`)+card('Relationship graph',graph(d.domain,d.hosts,info))}},
+ score:{label:'IP Score',ph:'IP address (blank = your IP)',opt:1,async run(v){
+  const {score,...rest}=await api('ipinfo',v?{q:v}:{});
+  return card('Score (heuristic)',`<div class="score ${score>=80?'ok':score>=50?'':'bad'}">${score}<small>/100</small></div>`)+card('Details',kv(rest))}},
+ ping:{label:'Ping',ph:'example.com or 1.1.1.1',async run(v){
+  const d=await api('ping',{q:v});
+  const rows=d.probes.sort((a,b)=>(a.avg??1e9)-(b.avg??1e9)).map(p=>`<tr><td>${esc(p.city)}, ${esc(p.country)}</td><td>${esc(p.network)}</td><td class="${p.avg!=null?'ok':'bad'}">${p.avg!=null?p.avg+' ms':'failed'}</td><td>${p.loss!=null?p.loss+'% loss':''}</td></tr>`).join('');
+  return card('Ping from '+d.probes.length+' locations',`<table>${rows}</table>`)}},
+ split:{label:'Split Test',async run(){
+  const rs=await Promise.all(ECHO.map(async u=>{const h=new URL(u).hostname;
+   try{const r=await fetch(u,{signal:AbortSignal.timeout(6000)});
+    const m=(await r.text()).match(/\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}/i);return{h,ip:m&&m[0]}}catch{return{h}}}));
+  const cnt={};rs.forEach(r=>{if(r.ip)cnt[r.ip]=(cnt[r.ip]||0)+1});
+  const top={};Object.entries(cnt).forEach(([ip,n])=>{const f=ip.includes(':')?6:4;if(!top[f]||n>cnt[top[f]])top[f]=ip});
+  const v4=new Set(rs.filter(r=>r.ip&&!r.ip.includes(':')).map(r=>r.ip)).size;
+  const rows=rs.map(r=>{const odd=r.ip&&r.ip!==top[r.ip.includes(':')?6:4];
+   return `<tr><td>${esc(r.h)}</td><td>${esc(r.ip||'')}</td><td class="${r.ip?(odd?'bad':'ok'):'mut'}">${r.ip?(odd?'different exit':'main exit'):'blocked / failed'}</td></tr>`}).join('');
+  return card('Summary',v4>1?`<span class="bad">${v4} different IPv4 exit addresses: traffic is being split.</span>`:'<span class="ok">All reachable sites see the same IPv4 address.</span>')+card('Exit IP by site',`<table>${rows}</table>`)}},
  webrtc:{label:'WebRTC',run:()=>new Promise(res=>{
   const found=new Map(),pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
   let fin=false;
@@ -74,6 +119,6 @@ function pick(id){cur=id;const t=tabs[id];
  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
  f.hidden=!t.ph;q.placeholder=t.ph||'';q.value='';out.innerHTML='';if(!t.ph)go()}
 Object.entries(tabs).forEach(([id,t])=>{const b=document.createElement('button');b.textContent=t.label;b.dataset.id=id;b.onclick=()=>pick(id);nav.append(b)});
-f.onsubmit=e=>{e.preventDefault();if(q.value.trim())go()};
+f.onsubmit=e=>{e.preventDefault();if(q.value.trim()||tabs[cur].opt)go()};
 pick('ip');
 </script></body></html>
