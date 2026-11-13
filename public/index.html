@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Net Tools</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#667085;--card:#f5f7fa;--bd:#d0d5dd;--ac:#2563eb}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1318;--fg:#e6e9ee;--mut:#98a2b3;--card:#171c23;--bd:#2a313b;--ac:#60a5fa}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:860px;margin:0 auto;padding:20px 16px}
+h1{font-size:20px;margin:0 0 12px}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+button{border:1px solid var(--bd);background:var(--card);color:var(--fg);padding:6px 12px;border-radius:8px;cursor:pointer;font:inherit}
+button.on,form button{background:var(--ac);border-color:var(--ac);color:#fff}
+form{display:flex;gap:8px;margin-bottom:12px}
+input{flex:1;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:12px;overflow-x:auto}
+.card h3{margin:0 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+table{border-collapse:collapse;width:100%}
+td{padding:3px 10px 3px 0;vertical-align:top;word-break:break-all}
+td:first-child{color:var(--mut);white-space:nowrap;width:1%}
+.mut{color:var(--mut)}.ok{color:#16a34a}.bad{color:#dc2626}
+</style></head>
+<body><main>
+<h1>Net Tools</h1>
+<nav id="nav"></nav>
+<form id="f"><input id="q" autocomplete="off" spellcheck="false"><button>Go</button></form>
+<div id="out"></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const kv=o=>'<table>'+Object.entries(o).filter(([,v])=>v!=null&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(Array.isArray(v)?v.join(', '):v)}</td></tr>`).join('')+'</table>';
+const card=(t,h)=>`<div class="card"><h3>${esc(t)}</h3>${h}</div>`;
+const api=async(p,q={})=>{const r=await fetch('/api/'+p+'?'+new URLSearchParams(q));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed ('+r.status+')');return d};
+
+const tabs={
+ ip:{label:'My IP',async run(){
+  const d=await api('ip');
+  let tr;
+  try{const r=await fetch('/cdn-cgi/trace');if(!r.ok)throw 0;
+   tr=kv(Object.fromEntries((await r.text()).trim().split('\n').map(l=>l.split('='))))}
+  catch{tr='<span class="mut">Only available on the deployed site.</span>'}
+  return card('Your IP',kv(d))+card('Cloudflare trace',tr)}},
+ dns:{label:'DNS',ph:'example.com',async run(v){
+  const d=await api('dns',{q:v});
+  return Object.entries(d).map(([t,rows])=>card(t,rows.length?'<table>'+rows.map(r=>`<tr><td>${esc(r.ttl)}s</td><td>${esc(r.data)}</td></tr>`).join('')+'</table>':'<span class="mut">No records</span>')).join('')}},
+ whois:{label:'Whois',ph:'example.com or 8.8.8.8',async run(v){return card('RDAP result',kv(await api('whois',{q:v})))}},
+ status:{label:'Status',ph:'https://example.com (several allowed, space-separated)',async run(v){
+  const urls=v.split(/[\s,]+/).filter(Boolean).slice(0,10);
+  const rs=await Promise.all(urls.map(u=>api('status',{url:u}).catch(e=>({url:u,error:e.message}))));
+  return card('Results','<table>'+rs.map(r=>`<tr><td>${esc(r.url)}</td><td class="${r.ok?'ok':'bad'}">${esc(r.error||(r.status+' '+(r.statusText||'')))}</td><td>${r.ms!=null?r.ms+' ms':''}</td></tr>`).join('')+'</table>')}},
+ webrtc:{label:'WebRTC',run:()=>new Promise(res=>{
+  const found=new Map(),pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  let fin=false;
+  const done=async()=>{if(fin)return;fin=true;pc.close();
+   let pub='';try{pub=(await api('ip')).ip}catch{}
+   const pubs=[...found].filter(([,t])=>t==='srflx').map(([a])=>a);
+   const leak=pubs.some(a=>a!==pub);
+   const verdict=!pubs.length?'<span class="ok">No public IP exposed via WebRTC.</span>'
+    :leak?'<span class="bad">WebRTC shows a public IP different from the one websites see (could be IPv6 or a leak).</span>'
+    :'<span class="ok">No leak: WebRTC IP matches your public IP.</span>';
+   res(card('Verdict',verdict+`<p class="mut">Server sees: ${esc(pub||'unknown')}</p>`)+
+    card('ICE candidates',found.size?'<table>'+[...found].map(([a,t])=>`<tr><td>${esc(t)}</td><td>${esc(a)}</td></tr>`).join('')+'</table>':'<span class="mut">None found (WebRTC may be blocked).</span>'))};
+  pc.onicecandidate=e=>{if(!e.candidate)return done();const p=e.candidate.candidate.split(' ');found.set(p[4],p[7])};
+  pc.createDataChannel('x');pc.createOffer().then(o=>pc.setLocalDescription(o));
+  setTimeout(done,5000)})}
+};
+
+const nav=$('#nav'),f=$('#f'),q=$('#q'),out=$('#out');let cur;
+async function go(){out.innerHTML='<div class="card mut">Loading…</div>';
+ try{out.innerHTML=await tabs[cur].run(q.value.trim())}catch(e){out.innerHTML=card('Error',`<span class="bad">${esc(e.message)}</span>`)}}
+function pick(id){cur=id;const t=tabs[id];
+ nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+ f.hidden=!t.ph;q.placeholder=t.ph||'';q.value='';out.innerHTML='';if(!t.ph)go()}
+Object.entries(tabs).forEach(([id,t])=>{const b=document.createElement('button');b.textContent=t.label;b.dataset.id=id;b.onclick=()=>pick(id);nav.append(b)});
+f.onsubmit=e=>{e.preventDefault();if(q.value.trim())go()};
+pick('ip');
+</script></body></html>
