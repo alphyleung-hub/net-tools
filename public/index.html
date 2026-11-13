@@ -55,6 +55,12 @@ tr:last-child td{border-bottom:0}
 .bar{display:grid;grid-template-columns:150px 1fr 28px;align-items:center;gap:8px;font-size:13px;margin:5px 0}
 .bar i{display:block;height:12px;border-radius:4px;background:var(--ac);opacity:.75}.bar b{text-align:right}
 .dl{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600;padding:8px 16px;margin-bottom:14px}
+.cats{max-width:960px;margin:0 auto;padding:0 16px 8px;display:flex;gap:8px}
+.cats button{flex:1;padding:8px 6px;border-radius:10px;font-weight:600;font-size:14px;line-height:1.3}
+.cats button span{display:block;font-size:18px}.cats button.on{background:var(--acs);border-color:var(--ac);color:var(--ac)}
+label{font-size:12px;color:var(--mut)}
+select,.kv input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit;margin-top:2px}
+.cfg{white-space:pre;overflow:auto;max-height:340px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;margin:0 0 10px}
 .pill.mx{color:#3b82f6}
 a{color:var(--ac)}
 footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
@@ -63,6 +69,7 @@ footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 <header>
  <div class="bar"><div class="logo">Net<span>Tools</span></div>
   <div class="seg" id="th"><button data-t="light" title="Light">☀️</button><button data-t="dark" title="Dark">🌙</button><button data-t="auto" title="Follow system">Auto</button></div></div>
+ <div class="cats" id="cats"></div>
  <nav id="nav"></nav>
 </header>
 <main>
@@ -126,8 +133,44 @@ const lat=async u=>{let best=null;for(let i=0;i<2;i++){const t=performance.now()
  try{await fetch(u,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:AbortSignal.timeout(8000)});const d=Math.round(performance.now()-t);best=best==null?d:Math.min(best,d)}catch{return best}}return best};
 const pill=(ok,t)=>`<span class="pill ${ok}">${t}</span>`;
 
+const v4n=s=>{const p=s.split('.');return p.length===4&&p.every(x=>/^\d{1,3}$/.test(x)&&+x<256)?p.reduce((a,x)=>a*256n+BigInt(x),0n):null};
+const v4s=n=>[24n,16n,8n,0n].map(k=>(n>>k)&255n).join('.');
+function v6n(s){if(!/^[0-9a-f:]+$/i.test(s)||s.split('::').length>2)return null;const[a,b]=s.split('::'),A=a?a.split(':'):[],B=b?b.split(':'):[];
+ if(s.includes('::')){const m=8-A.length-B.length;if(m<1)return null;A.push(...Array(m).fill('0'),...B)}else if(A.length!==8)return null;
+ return A.every(x=>/^[0-9a-f]{1,4}$/i.test(x))?A.reduce((n,x)=>n*65536n+BigInt('0x'+x),0n):null}
+function v6s(n){const g=[];for(let i=7;i>=0;i--)g.push(Number((n>>BigInt(i*16))&0xffffn).toString(16));
+ let bi=-1,bl=0;for(let i=0;i<8;){if(g[i]==='0'){let j=i;while(j<8&&g[j]==='0')j++;if(j-i>bl){bi=i;bl=j-i}i=j}else i++}
+ return bl>1?g.slice(0,bi).join(':')+'::'+g.slice(bi+bl).join(':'):g.join(':')}
+const ipn=s=>{const a=v4n(s);if(a!=null)return{n:a,t:32};const b=s.includes(':')?v6n(s):null;return b!=null?{n:b,t:128}:null};
+const fmt=(n,t)=>t===32?v4s(n):v6s(n);
+function subnet(inp){
+ const m=inp.trim().split(/[\s/]+/),ip=ipn(m[0]||'');if(!ip)throw new Error('Enter an IPv4 or IPv6 address, like 192.168.1.10/24');
+ let len=ip.t;
+ if(m[1]!==undefined){if(/^\d+$/.test(m[1]))len=+m[1];else{const k=v4n(m[1]);if(k==null||ip.t!==32)throw new Error('Invalid subnet mask');
+  const bits=k.toString(2).padStart(32,'0');if(!/^1*0*$/.test(bits))throw new Error('Mask must be contiguous, like 255.255.255.0');len=bits.replace(/0/g,'').length}}
+ if(len>ip.t)throw new Error('Prefix must be 0 to '+ip.t);
+ const hb=BigInt(ip.t-len),host=(1n<<hb)-1n,mask=((1n<<BigInt(ip.t))-1n)^host,net=ip.n&mask,last=net|host,size=1n<<hb;
+ if(ip.t===32){const two=len>=31;return{address:fmt(ip.n,32),cidr:fmt(net,32)+'/'+len,subnet_mask:fmt(mask,32),wildcard_mask:fmt(host,32),network:fmt(net,32),broadcast:len===32?'n/a':fmt(last,32),first_usable:fmt(two?net:net+1n,32),last_usable:fmt(two?last:last-1n,32),total_addresses:String(size),usable_hosts:String(len===32?1n:len===31?2n:size-2n)}}
+ return{address:fmt(ip.n,128),prefix:fmt(net,128)+'/'+len,network:fmt(net,128),last_address:fmt(last,128),total_addresses:`${size} (2^${ip.t-len})`}}
+function r2c(inp){const p=inp.trim().split(/\s*(?:-|–|\bto\b)\s*|\s+/).filter(Boolean),a=ipn(p[0]||''),b=ipn(p[1]||'');
+ if(!a||!b||a.t!==b.t)throw new Error('Enter a range like 192.168.1.0 - 192.168.1.255 (same IP version)');if(a.n>b.n)throw new Error('Start must be lower than end');
+ const out=[];let s=a.n;while(s<=b.n){let len=a.t;while(len>0){const z=1n<<BigInt(a.t-len+1);if(s%z!==0n||s+z-1n>b.n)break;len--}out.push(fmt(s,a.t)+'/'+len);s+=1n<<BigInt(a.t-len)}return out}
+function dur(s){if(!isFinite(s)||s<0)return '-';if(s<1)return '< 1 s';const o=[];for(const[k,n]of[['d',86400],['h',3600],['m',60],['s',1]]){const q=Math.floor(s/n);if(q){o.push(q+k);s-=q*n}}return o.slice(0,3).join(' ')}
+const bwCalc=(sz,su,sp,spu,ov,ut)=>{const bits=sz*{MB:1e6,GB:1e9,TB:1e12}[su]*8,rate=sp*{Kbps:1e3,Mbps:1e6,Gbps:1e9}[spu],eff=rate*(1-ov/100)*(ut/100);return{ideal:bits/rate,real:bits/eff,eff}};
+const tl=(n,a,b)=>n==null?'mut':n<a?'ok':n<b?'warn':'bad';
+const GEN={
+ cisco:{n:'Cisco IOS: VLAN and access ports',f:[['vid','VLAN ID','20'],['name','VLAN name','USERS'],['ports','Access ports','Gi1/0/1 - 24'],['ip','VLAN interface IP and mask (optional)','192.168.20.1 255.255.255.0']],
+  fn:v=>`vlan ${v.vid}\n name ${v.name}\n!\ninterface range ${v.ports}\n switchport mode access\n switchport access vlan ${v.vid}\n spanning-tree portfast\n!`+(v.ip?`\ninterface Vlan${v.vid}\n description ${v.name}\n ip address ${v.ip}\n no shutdown\n!`:'')},
+ mikrotik:{n:'MikroTik: firewall address-list',f:[['list','List name','blocklist'],['addrs','Addresses (comma or space separated)','203.0.113.5, 198.51.100.0/24'],['timeout','Timeout (optional)','1d'],['drop','Add a drop rule? (yes/no)','yes']],
+  fn:v=>v.addrs.split(/[\s,]+/).filter(Boolean).map(x=>`/ip firewall address-list add list=${v.list} address=${x}`+(v.timeout?` timeout=${v.timeout}`:'')).join('\n')+(/^y/i.test(v.drop)?`\n/ip firewall filter add chain=input src-address-list=${v.list} action=drop comment="drop ${v.list}"`:'')},
+ nft:{n:'Linux nftables: basic server firewall',f:[['tcp','Allowed TCP ports','22, 80, 443'],['udp','Allowed UDP ports (optional)',''],['ssh','Rate-limit SSH? (yes/no)','yes']],
+  fn:v=>{const ssh=/^y/i.test(v.ssh),l=x=>x.split(/[\s,]+/).filter(Boolean),tcp=l(v.tcp).filter(x=>!(ssh&&x==='22')),udp=l(v.udp);
+   return `table inet filter {\n  chain input {\n    type filter hook input priority 0; policy drop;\n    ct state established,related accept\n    ct state invalid drop\n    iif lo accept\n    ip protocol icmp accept\n    ip6 nexthdr icmpv6 accept\n`+(ssh?'    tcp dport 22 ct state new limit rate 6/minute accept\n':'')+(tcp.length?`    tcp dport { ${tcp.join(', ')} } accept\n`:'')+(udp.length?`    udp dport { ${udp.join(', ')} } accept\n`:'')+'  }\n  chain forward {\n    type filter hook forward priority 0; policy drop;\n  }\n  chain output {\n    type filter hook output priority 0; policy accept;\n  }\n}'}}
+};
+const CATS={me:['🏠','Connection'],dom:['🌍','Domain & DNS'],net:['📡','Network'],tool:['🧮','Tools']};
+
 const T={
- ip:{i:'🌐',label:'My IP',title:'What is my IP address?',sub:'See the address websites see, and roughly where it is.',
+ ip:{cat:'me',i:'🌐',label:'My IP',title:'What is my IP address?',sub:'See the address websites see, and roughly where it is.',
   help:'Your <b>IP address</b> is like your home address on the internet. Websites use it to guess where you are. Using a VPN? Check here that it shows the VPN address and not your own. Press <b>Hide IP</b> before taking a screenshot.',
   async run(){
    const d=await api('ip');let tr;
@@ -135,7 +178,7 @@ const T={
    catch{tr='<span class="mut">Only available on the deployed site.</span>'}
    const {ip,country,city,region,...rest}=d;
    return `<div class="card ipcard"><div class="mut">Your public IP address</div><div class="bigip" id="bigip">${esc(ip||'Unknown')}</div><div class="loc">${flag(country)} ${esc([city,region,country].filter(Boolean).join(', ')||'Location unknown')}</div><div class="acts"><button id="cp">Copy</button><button id="hd">Hide IP</button></div></div>`+card('Network details',kv(rest))+card('Cloudflare trace',tr)}},
- claude:{i:'🤖',label:'Claude Check',title:'Claude connection check',sub:'Is this connection usable for Claude? Region, IP type and reachability in one place.',ph:'IP address (leave blank for yours)',opt:1,ex:['8.8.8.8'],
+ claude:{cat:'me',i:'🤖',label:'Claude Check',title:'Claude connection check',sub:'Is this connection usable for Claude? Region, IP type and reachability in one place.',ph:'IP address (leave blank for yours)',opt:1,ex:['8.8.8.8'],
   help:'Checks a connection for Claude: is the country on the <b>supported regions</b> list published by Anthropic, does the IP look like a <b>home</b> or <b>datacenter</b> address, are there <b>VPN / proxy / Tor</b> flags, can your browser reach <b>claude.ai</b>, and does <b>WebRTC</b> leak. All results are estimates and only informational.',
   async run(v){
    const [d,pl,l1,l2,w]=await Promise.all([api('ipinfo',v?{q:v}:{}).catch(e=>({error:e.message})),v?null:api('ip').catch(()=>null),lat('https://claude.ai/'),lat('https://www.anthropic.com/'),T.webrtc.run()]);
@@ -155,7 +198,7 @@ const T={
     +card('IP quality',qual)
     +card('Reachability from your browser',`<table><tr><td>claude.ai</td><td>${lt(l1)}</td></tr><tr><td>anthropic.com</td><td>${lt(l2)}</td></tr></table><p class="mut">Far from the US, 100 ms or more is normal.</p>`)
     +w+card('Your device',kv(dev))}},
- map:{i:'🗺️',label:'Domain Map',title:'Domain map',sub:'Find the hidden sub-sites and servers behind a website.',ph:'example.com',ex:['github.com','cloudflare.com'],
+ map:{cat:'dom',i:'🗺️',label:'Domain Map',title:'Domain map',sub:'Find the hidden sub-sites and servers behind a website.',ph:'example.com',ex:['github.com','cloudflare.com'],
   help:'Type a website name. We find its <b>sub-sites</b> (like mail.example.com), the <b>server addresses</b> behind them and <b>who hosts</b> them. In the picture: <b style="color:#22c55e">green</b> = sub-sites, <b style="color:#3b82f6">blue</b> = mail servers, <b style="color:#8b5cf6">purple</b> = server IPs grouped in their hosting network. You can also download everything as an Excel file.',
   async run(v){
    const d=await api('subs',{q:v}),mx=d.mx||[];
@@ -172,25 +215,25 @@ const T={
     +`<div class="grid2">${card('Hosting / networks',bars(nets))}${card('Server locations',bars(ctry))}</div>`
     +card('Relationship graph',graph(d.domain,d.hosts,mx,info,ips))
     +card('Hosts',`<p class="mut">${esc(note)}</p><table>${tr}</table>`)}},
- dns:{i:'📖',label:'DNS',title:'DNS records',sub:'The internet phonebook entries for a domain.',ph:'example.com',ex:['google.com','github.com'],
+ dns:{cat:'dom',i:'📖',label:'DNS',title:'DNS records',sub:'The internet phonebook entries for a domain.',ph:'example.com',ex:['google.com','github.com'],
   help:'DNS turns a name like google.com into numbers computers use. <b>A</b> = IPv4 address, <b>AAAA</b> = IPv6 address, <b>MX</b> = mail servers, <b>NS</b> = who manages the name, <b>TXT</b> = notes (often email security), <b>CNAME</b> = alias, <b>SOA</b> = admin info, <b>CAA</b> = who may issue its security certificates.',
   async run(v){const d=await api('dns',{q:v});
    return Object.entries(d).map(([t,rows])=>card(t,rows.length?'<table>'+rows.map(r=>`<tr><td class="mut" style="width:1%;white-space:nowrap">${esc(r.ttl)}s</td><td>${esc(r.data)}</td></tr>`).join('')+'</table>':'<span class="mut">No records</span>')).join('')}},
- whois:{i:'🔎',label:'Whois',title:'Whois lookup',sub:'Who owns a domain or an IP address.',ph:'example.com or 8.8.8.8',ex:['google.com','8.8.8.8'],
+ whois:{cat:'dom',i:'🔎',label:'Whois',title:'Whois lookup',sub:'Who owns a domain or an IP address.',ph:'example.com or 8.8.8.8',ex:['google.com','8.8.8.8'],
   help:'Shows who registered a domain, when it was created and when it expires. Type an <b>IP address</b> instead to see who owns that block of addresses. Personal details are usually hidden for privacy.',
   async run(v){return card('Result',kv(await api('whois',{q:v})))}},
- score:{i:'🛡️',label:'IP Score',title:'IP score',sub:'How trustworthy does an IP address look?',ph:'IP address (leave blank for yours)',opt:1,ex:['8.8.8.8','1.1.1.1'],
+ score:{cat:'me',i:'🛡️',label:'IP Score',title:'IP score',sub:'How trustworthy does an IP address look?',ph:'IP address (leave blank for yours)',opt:1,ex:['8.8.8.8','1.1.1.1'],
   help:'Gives an IP a score from 0 to 100. <b>High = clean.</b> The score drops if the IP looks like a VPN, proxy, Tor, a datacenter, or has abuse reports. Leave the box empty and press Check to test your own IP. This is a simple estimate, not an official rating.',
   async run(v){const {score,...rest}=await api('ipinfo',v?{q:v}:{});
    const c=score>=80?'ok':score>=50?'warn':'bad',w=score>=80?'Looks clean':score>=50?'Some risk':'High risk';
    return card('Score',`<div class="score ${c}">${score}<small>/100</small></div><p class="${c}"><b>${w}</b></p>`)+card('Details',kv(rest))}},
- ping:{i:'📡',label:'Ping',title:'Global ping',sub:'How fast does a site answer from around the world?',ph:'example.com or 1.1.1.1',ex:['google.com','cloudflare.com'],
+ ping:{cat:'net',i:'📡',label:'Ping',title:'Global ping',sub:'How fast does a site answer from around the world?',ph:'example.com or 1.1.1.1',ex:['google.com','cloudflare.com'],
   help:'We ask 10 computers in different countries to contact the site. <b>Lower ms is faster</b> (under 100 ms is great). <b>Failed</b> means that location could not reach it. This takes a few seconds.',
   async run(v){const d=await api('ping',{q:v});
    const rows=d.probes.sort((a,b)=>(a.avg??1e9)-(b.avg??1e9)).map(p=>{const c=p.avg==null?'bad':p.avg<100?'ok':p.avg<250?'warn':'bad';
     return `<tr><td>${esc(p.city)}, ${esc(p.country)}</td><td class="mut">${esc(p.network)}</td><td class="${c}"><b>${p.avg!=null?p.avg+' ms':'failed'}</b></td><td class="mut">${p.loss!=null?p.loss+'% loss':''}</td></tr>`}).join('');
    return card('Ping from '+d.probes.length+' locations',`<table>${rows}</table>`)}},
- split:{i:'🔀',label:'Split Test',title:'Split-route test',sub:'Do different websites see different IP addresses from you?',
+ split:{cat:'me',i:'🔀',label:'Split Test',title:'Split-route test',sub:'Do different websites see different IP addresses from you?',
   help:'Some VPN or proxy setups send some websites through a different route. We ask 10 sites what IP they see. <b>All the same</b> = one route. <b>Different</b> = your traffic is split. "Blocked" just means that site does not allow this test.',
   async run(){
    const rs=await Promise.all(ECHO.map(async u=>{const h=new URL(u).hostname;
@@ -202,12 +245,12 @@ const T={
    const rows=rs.map(r=>{const odd=r.ip&&r.ip!==top[r.ip.includes(':')?6:4];
     return `<tr><td>${esc(r.h)}</td><td>${esc(r.ip||'')}</td><td><span class="pill ${r.ip?(odd?'bad':'ok'):'mut'}">${r.ip?(odd?'different exit':'main exit'):'blocked / failed'}</span></td></tr>`}).join('');
    return card('Summary',v4>1?`<b class="bad">${v4} different IPv4 addresses seen: your traffic is being split.</b>`:'<b class="ok">All reachable sites see the same IPv4 address.</b>')+card('IP seen by each site',`<table>${rows}</table>`)}},
- status:{i:'✅',label:'Status',title:'Website status',sub:'Is a website up and how fast does it reply?',ph:'https://example.com (several allowed, separated by spaces)',ex:['google.com github.com cloudflare.com'],
+ status:{cat:'net',i:'✅',label:'Status',title:'Website status',sub:'Is a website up and how fast does it reply?',ph:'https://example.com (several allowed, separated by spaces)',ex:['google.com github.com cloudflare.com'],
   help:'Checks if websites are online. <b>200</b> = working, <b>301/302</b> = redirected, <b>404</b> = page not found, <b>500+</b> = server problem. You can check up to 10 at once.',
   async run(v){const urls=v.split(/[\s,]+/).filter(Boolean).slice(0,10);
    const rs=await Promise.all(urls.map(u=>api('status',{url:u}).catch(e=>({url:u,error:e.message}))));
    return card('Results','<table>'+rs.map(r=>`<tr><td>${esc(r.url)}</td><td><span class="pill ${r.ok?'ok':'bad'}">${esc(r.error||(r.status+' '+(r.statusText||'')))}</span></td><td class="mut">${r.ms!=null?r.ms+' ms':''}</td></tr>`).join('')+'</table>')}},
- webrtc:{i:'🔒',label:'WebRTC',title:'WebRTC leak test',sub:'Is your browser leaking your real IP?',
+ webrtc:{cat:'me',i:'🔒',label:'WebRTC',title:'WebRTC leak test',sub:'Is your browser leaking your real IP?',
   help:'WebRTC is a browser feature for calls and video. It can sometimes <b>reveal your real IP even when you use a VPN</b>. We check if that is happening. A green result means you are fine.',
   run:()=>new Promise(res=>{
    const found=new Map(),pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
@@ -223,22 +266,74 @@ const T={
      card('Addresses found',found.size?'<table>'+[...found].map(([a,t])=>`<tr><td class="mut">${esc(t)}</td><td>${esc(a)}</td></tr>`).join('')+'</table>':'<span class="mut">None found (WebRTC may be blocked).</span>'))};
    pc.onicecandidate=e=>{if(!e.candidate)return done();const p=e.candidate.candidate.split(' ');found.set(p[4],p[7])};
    pc.createDataChannel('x');pc.createOffer().then(o=>pc.setLocalDescription(o));
-   setTimeout(done,5000)})}
+   setTimeout(done,5000)})},
+ prop:{cat:'dom',i:'🌐',label:'Propagation',title:'DNS propagation check',sub:'Ask several public DNS servers the same question.',ph:'example.com (add a type: example.com MX)',ex:['google.com','github.com AAAA','gmail.com MX'],
+  help:'After changing a DNS record, different DNS servers update at different speeds. We ask <b>Cloudflare, Google, Quad9 and OpenDNS</b> at once. If they all agree, your change has spread. Sites behind a CDN may legitimately show different IPs. Types: A, AAAA, MX, NS, TXT, CNAME.',
+  async run(v){const[q,t='A']=v.split(/\s+/),d=await api('prop',{q,t:t.toUpperCase()});
+   const sig=r=>[...r.answers].sort().join('|'),ok=d.results.filter(r=>!r.error),same=new Set(ok.map(sig)).size<=1&&ok.length>0;
+   const rows=d.results.map(r=>`<tr><td><b>${esc(r.resolver)}</b></td><td>${r.error?'<span class="bad">'+esc(r.error)+'</span>':r.answers.length?r.answers.map(esc).join('<br>'):'<span class="mut">No answer'+(r.rcode===3?' (name not found)':'')+'</span>'}</td><td class="${tl(r.ms,300,800)}">${r.ms!=null?r.ms+' ms':''}</td></tr>`).join('');
+   return card('Result',same?'<b class="ok">All resolvers agree.</b>':'<b class="warn">Resolvers give different answers: still propagating, or the site uses load balancing.</b>')+card(d.domain+' ('+d.type+')',`<table>${rows}</table>`)}},
+ dnssec:{cat:'dom',i:'🔐',label:'DNSSEC',title:'DNSSEC validator',sub:'Is the domain signed, and does the chain of trust check out?',ph:'example.com',ex:['cloudflare.com','example.com'],
+  help:'DNSSEC adds digital signatures to DNS so answers cannot be faked. We check whether the domain has a <b>DS record</b> (published at the parent) and whether a validating resolver accepts the chain. <b>Bogus</b> means it is signed but broken, which makes many resolvers refuse the domain.',
+  async run(v){const d=await api('dnssec',{q:v});
+   const m={valid:['ok','Valid: chain of trust verified'],bogus:['bad','Broken: signed but validation fails'],unsigned:['warn','Not signed: no DS record found'],unknown:['warn','Signed, but the resolver did not confirm validation']}[d.status];
+   return card('Status',`<b class="${m[0]}" style="font-size:18px">${m[1]}</b>`)+card('Details',kv({validated_by_resolver:d.validated_by_resolver,dnskey_count:d.dnskey_count,ds_records:d.ds_records}))}},
+ ssl:{cat:'dom',i:'📜',label:'SSL/TLS',title:'SSL/TLS certificate',sub:'Expiry date, issuer and covered names.',ph:'example.com',ex:['github.com','cloudflare.com'],
+  help:'Shows the newest active certificate issued for the domain: who issued it, when it expires, and which names it covers (SANs). Data comes from public certificate logs. Supported TLS versions cannot be probed from the free Cloudflare plan.',
+  async run(v){const d=await api('ssl',{q:v}),c=d.days_left>30?'ok':d.days_left>=7?'warn':'bad';
+   return card('Expiry',`<div class="score ${c}">${d.days_left}<small> days left</small></div>`)+card('Certificate',kv({issuer:d.issuer,valid_from:d.valid_from,valid_to:d.valid_to,serial:d.serial}))+card('Covered names (SANs)',`<div class="cfg">${esc(d.sans.join('\n'))}</div>`)}},
+ mtr:{cat:'net',i:'🧭',label:'MTR',title:'MTR traceroute',sub:'See every hop between a server and the target, with loss and delay.',ph:'example.com or 1.1.1.1',ex:['google.com','cloudflare.com'],
+  help:'MTR shows each router on the path. <b>Loss</b> above 0% on the last hop is a problem; loss only in a middle hop is often harmless. <b>Avg</b> is the average delay in ms. This runs from a public server (HackerTarget), not from your computer, and takes up to 20 seconds.',
+  async run(v){const d=await api('mtr',{q:v});
+   const rows=d.hops.map(h=>`<tr><td class="mut">${h.hop}</td><td>${esc(h.host)}</td><td class="${h.loss>=20?'bad':h.loss>0?'warn':'ok'}">${h.loss}%</td><td class="mut">${h.sent}</td><td>${h.last}</td><td class="${tl(h.avg,80,200)}"><b>${h.avg}</b></td><td>${h.best}</td><td>${h.worst}</td><td class="mut">${h.stdev}</td></tr>`).join('');
+   return card('Route to '+d.target,`<table><tr class="mut"><td>#</td><td>Host</td><td>Loss</td><td>Sent</td><td>Last</td><td>Avg</td><td>Best</td><td>Worst</td><td>StDev</td></tr>${rows}</table>`)}},
+ asn:{cat:'net',i:'🏢',label:'ASN Prefixes',title:'ASN prefix lookup',sub:'Every IP range a network announces to the internet.',ph:'AS13335',ex:['AS13335','AS15169'],
+  help:'An <b>ASN</b> is the ID of a network (for example AS13335 is Cloudflare). This lists the IPv4 and IPv6 <b>prefixes</b> that network announces. Data from RIPEstat. Up to 300 of each are shown.',
+  async run(v){const d=await api('asn',{q:v});
+   return card(d.asn,kv({holder:d.holder,ipv4_prefixes:d.v4_count,ipv6_prefixes:d.v6_count}))+card('IPv4 prefixes',`<div class="cfg">${esc(d.v4.join('\n')||'None')}</div>`)+card('IPv6 prefixes',`<div class="cfg">${esc(d.v6.join('\n')||'None')}</div>`)}},
+ bgp:{cat:'net',i:'🛰️',label:'BGP Route',title:'BGP looking glass (lite)',sub:'Is a route visible on the internet, and what paths lead to it?',ph:'1.1.1.0/24 or 8.8.8.8',ex:['1.1.1.0/24','8.8.8.8'],
+  help:'BGP is how networks tell each other which IPs they own. We ask RIPE route collectors around the world: <b>how many see this route</b>, which network <b>originates</b> it, and sample <b>AS paths</b> (the chain of networks between them and the origin).',
+  async run(v){const d=await api('bgp',{q:v});
+   const rows=d.paths.map(x=>`<tr><td>${esc(x.location)}</td><td>AS${esc(x.origin)}</td><td class="mut">${esc(Array.isArray(x.path)?x.path.join(' '):x.path)}</td></tr>`).join('');
+   return card('Visibility',kv({origin:d.origins,seen_by_ipv4_peers:d.v4_peers_seeing,seen_by_ipv6_peers:d.v6_peers_seeing,first_seen:d.first_seen,last_seen:d.last_seen}))+card('Sample AS paths',rows?`<table><tr class="mut"><td>Collector</td><td>Origin</td><td>AS path</td></tr>${rows}</table>`:'<span class="mut">No paths returned.</span>')}},
+ subnet:{cat:'tool',i:'🧮',label:'Subnet Calc',title:'Subnet calculator',sub:'IPv4 and IPv6: network, broadcast, usable hosts and masks.',ph:'192.168.1.10/24  or  10.0.0.1 255.255.255.0  or  2001:db8::/32',ex:['192.168.1.10/24','10.0.0.1 255.255.255.192','2001:db8::/48'],
+  help:'Type an IP with a <b>CIDR prefix</b> (/24) or a <b>subnet mask</b> (255.255.255.0). You get the network address, broadcast, first and last usable host and counts. IPv6 works too. Everything is calculated in your browser.',
+  async run(v){return card('Result',kv(subnet(v)))}},
+ range:{cat:'tool',i:'📐',label:'Range to CIDR',title:'IP range to CIDR',sub:'Turn a start and end IP into the smallest list of CIDR blocks.',ph:'192.168.1.0 - 192.168.1.255',ex:['192.168.1.0 - 192.168.1.255','10.0.0.5 - 10.0.0.20'],
+  help:'A range does not always fit in one block, so it may need several. Example: 10.0.0.5 - 10.0.0.20 becomes five CIDR blocks. Works for IPv4 and IPv6.',
+  async run(v){const l=r2c(v);return card(l.length+' CIDR block'+(l.length>1?'s':''),`<div class="cfg">${esc(l.join('\n'))}</div>`)}},
+ bw:{cat:'tool',i:'⏱️',label:'Transfer Time',title:'Transfer time calculator',sub:'How long will a file take to move over a link?',
+  help:'Real transfers are slower than the speed on the box because of <b>protocol overhead</b> (headers, framing) and <b>link utilization</b> (nothing runs at 100%). The defaults (6% and 90%) are typical for TCP over Ethernet. Change them to match your link.',
+  run:()=>`<div class="card"><div class="kv"><label>Data size<input id="b1" type="number" value="50" min="0"></label><label>Unit<select id="b2"><option>MB</option><option selected>GB</option><option>TB</option></select></label><label>Link speed<input id="b3" type="number" value="500" min="0"></label><label>Unit<select id="b4"><option>Kbps</option><option selected>Mbps</option><option>Gbps</option></select></label><label>Overhead %<input id="b5" type="number" value="6" min="0" max="90"></label><label>Link utilization %<input id="b6" type="number" value="90" min="1" max="100"></label></div></div><div id="bo"></div>`,
+  after(){const c=()=>{const g=i=>+$('#b'+i).value,r=bwCalc(g(1),$('#b2').value,g(3),$('#b4').value,g(5),g(6));
+    $('#bo').innerHTML=card('Estimated time',`<div class="score">${dur(r.real)}</div><p class="mut">Ideal, with no overhead: ${dur(r.ideal)}. Effective speed: ${(r.eff/1e6).toFixed(1)} Mbps (${(r.eff/8e6).toFixed(1)} MB/s).</p>`)};
+   document.querySelectorAll('#b1,#b2,#b3,#b4,#b5,#b6').forEach(e=>e.oninput=c);c()}},
+ oui:{cat:'tool',i:'🔖',label:'MAC Lookup',title:'MAC address vendor lookup',sub:'Find out who made a network device.',ph:'00:1A:2B:3C:4D:5E',ex:['FC:FB:FB:01:02:03','3C:22:FB:00:11:22'],
+  help:'The first 3 bytes of a MAC address (the <b>OUI</b>) identify the manufacturer. Phones often use a <b>random private MAC</b>, which has no vendor. Accepts : - . or no separators.',
+  async run(v){const hex=v.replace(/[:\-.\s]/g,''),b=parseInt(hex.slice(0,2),16);let d;try{d=await api('oui',{q:v})}catch(e){d={vendor:e.message}}
+   return card('Result',kv({vendor:d.vendor,oui:d.oui||hex.slice(0,6).toUpperCase(),address_type:isNaN(b)?'':b&1?'Multicast / broadcast':'Unicast',administration:isNaN(b)?'':b&2?'Locally administered (often a random private MAC)':'Universally administered (assigned by the vendor)'}))}},
+ gen:{cat:'tool',i:'📝',label:'Config Generator',title:'Network config generator',sub:'Ready-to-paste snippets for common tasks.',
+  help:'Pick a template, fill in the fields and copy the result. Always <b>review the config before applying it</b> to a real device, especially firewall rules.',
+  run:()=>`<div class="card"><label>Template<select id="g0">${Object.entries(GEN).map(([k,g])=>`<option value="${k}">${esc(g.n)}</option>`).join('')}</select></label><div class="kv" id="gf" style="margin-top:12px"></div></div><div id="gout"></div>`,
+  after(){const u=()=>{const g=GEN[$('#g0').value],v={};document.querySelectorAll('#gf input').forEach(i=>v[i.dataset.k]=i.value.trim());
+    $('#gout').innerHTML=card('Generated config',`<div class="cfg" id="cfgout">${esc(g.fn(v))}</div><button id="cpg">Copy</button>`)};
+   const r=()=>{const g=GEN[$('#g0').value];$('#gf').innerHTML=g.f.map(([k,l,d])=>`<label>${esc(l)}<input data-k="${k}" value="${esc(d)}"></label>`).join('');u()};
+   $('#g0').onchange=r;$('#gf').oninput=u;r()}}
 };
 
 const nav=$('#nav'),f=$('#f'),q=$('#q'),out=$('#out');let cur;
 async function go(){out.innerHTML='<div class="card mut"><span class="sp"></span>Checking…</div>';
- try{out.innerHTML=await T[cur].run(q.value.trim())}catch(e){out.innerHTML=card('Error',`<b class="bad">${esc(e.message)}</b>`)}}
+ try{out.innerHTML=await T[cur].run(q.value.trim());T[cur].after?.()}catch(e){out.innerHTML=card('Error',`<b class="bad">${esc(e.message)}</b>`)}}
 function pick(id){if(!T[id])id='ip';cur=id;const t=T[id];
- nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+ $('#cats').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.c===t.cat));nav.innerHTML='';Object.entries(T).filter(([,x])=>x.cat===t.cat).forEach(([k,x])=>{const b=document.createElement('button');b.textContent=x.i+' '+x.label;b.dataset.id=k;b.classList.toggle('on',k===id);b.onclick=()=>pick(k);nav.append(b)});
  $('#ttl').textContent=t.title;$('#sub').textContent=t.sub;$('#help').innerHTML='💡 '+t.help;
  f.hidden=!t.ph;$('#ex').hidden=!t.ex;q.placeholder=t.ph||'';q.value='';out.innerHTML='';
  $('#ex').innerHTML=t.ex?'Try:'+t.ex.map(x=>`<button class="chip" data-v="${esc(x)}">${esc(x)}</button>`).join(''):'';
  history.replaceState(null,'','#'+id);if(!t.ph)go()}
-Object.entries(T).forEach(([id,t])=>{const b=document.createElement('button');b.textContent=t.i+' '+t.label;b.dataset.id=id;b.onclick=()=>pick(id);nav.append(b)});
+Object.entries(CATS).forEach(([c,[ic,n]])=>{const b=document.createElement('button');b.innerHTML=`<span>${ic}</span>${n}`;b.dataset.c=c;b.onclick=()=>pick(Object.keys(T).find(k=>T[k].cat===c));$('#cats').append(b)});
 f.onsubmit=e=>{e.preventDefault();if(q.value.trim()||T[cur].opt)go()};
 $('#ex').onclick=e=>{const b=e.target.closest('.chip');if(b){q.value=b.dataset.v;go()}};
-out.onclick=e=>{const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(!b||!ip)return;
+out.onclick=e=>{const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(b&&b.id==='cpg'){try{navigator.clipboard.writeText($('#cfgout').textContent);b.textContent='Copied ✓'}catch{}return}if(!b||!ip)return;
  if(b.id==='cp'){try{navigator.clipboard.writeText(ip.textContent);b.textContent='Copied ✓'}catch{}}
  if(b.id==='hd'){ip.classList.toggle('blur');b.textContent=ip.classList.contains('blur')?'Show IP':'Hide IP'}};
 function theme(t){try{localStorage.setItem('th',t)}catch{}

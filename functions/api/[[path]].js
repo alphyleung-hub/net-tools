@@ -179,6 +179,118 @@ async function ping(target) {
   return [{ error: 'Timed out waiting for probes' }, 504];
 }
 
+const RES = { Cloudflare: 'https://cloudflare-dns.com/dns-query', Google: 'https://dns.google/dns-query', Quad9: 'https://dns.quad9.net/dns-query', OpenDNS: 'https://doh.opendns.com/dns-query' };
+const b64u = u => btoa(String.fromCharCode(...u)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function packQ(name, t) {
+  const o = [0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
+  for (const l of name.split('.')) o.push(l.length, ...new TextEncoder().encode(l));
+  o.push(0, t >> 8, t & 255, 0, 1);
+  return Uint8Array.from(o);
+}
+function parseDns(buf) {
+  const v = new DataView(buf), u = new Uint8Array(buf), dec = new TextDecoder();
+  const name = p => {
+    const out = []; let end = p, jumped = false;
+    for (let n = 0; n < 60; n++) {
+      const l = u[p];
+      if (l === 0) { if (!jumped) end = p + 1; break; }
+      if ((l & 0xc0) === 0xc0) { if (!jumped) end = p + 2; p = ((l & 0x3f) << 8) | u[p + 1]; jumped = true; continue; }
+      out.push(dec.decode(u.slice(p + 1, p + 1 + l))); p += l + 1;
+    }
+    return [out.join('.'), end];
+  };
+  const qd = v.getUint16(4), an = v.getUint16(6);
+  let p = 12;
+  for (let i = 0; i < qd; i++) p = name(p)[1] + 4;
+  const answers = [];
+  for (let i = 0; i < an; i++) {
+    p = name(p)[1];
+    const t = v.getUint16(p), len = v.getUint16(p + 8); p += 10;
+    let d = '';
+    if (t === 1) d = [...u.slice(p, p + 4)].join('.');
+    else if (t === 28) { const g = []; for (let k = 0; k < 16; k += 2) g.push(v.getUint16(p + k).toString(16)); d = g.join(':'); }
+    else if (t === 5 || t === 2) d = name(p)[0];
+    else if (t === 15) d = v.getUint16(p) + ' ' + name(p + 2)[0];
+    else if (t === 16) { let q = p; while (q < p + len) { d += dec.decode(u.slice(q + 1, q + 1 + u[q])); q += u[q] + 1; } }
+    answers.push({ type: t, data: d }); p += len;
+  }
+  return { rcode: v.getUint8(3) & 15, answers };
+}
+async function prop(q, type) {
+  const t = { A: 1, AAAA: 28, MX: 15, NS: 2, TXT: 16, CNAME: 5 }[type];
+  if (!t) return [{ error: 'Type must be A, AAAA, MX, NS, TXT or CNAME' }, 400];
+  const dns = b64u(packQ(q, t));
+  const results = await Promise.all(Object.entries(RES).map(async ([resolver, base]) => {
+    const t0 = Date.now();
+    try {
+      const r = await fetch(`${base}?dns=${dns}`, { headers: { accept: 'application/dns-message' }, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) throw 0;
+      const d = parseDns(await r.arrayBuffer());
+      return { resolver, ms: Date.now() - t0, rcode: d.rcode, answers: d.answers.filter(a => a.type === t).map(a => a.data) };
+    } catch { return { resolver, error: 'No response' }; }
+  }));
+  return [{ domain: q, type, results }, 200];
+}
+async function dnssec(q) {
+  const g = (type, cd) => fetch(`https://dns.google/resolve?name=${encodeURIComponent(q)}&type=${type}&do=1${cd ? '&cd=1' : ''}`, { signal: AbortSignal.timeout(6000) }).then(r => r.json());
+  const [a, acd, ds, key] = await Promise.all([g('A'), g('A', 1), g('DS'), g('DNSKEY')]);
+  const dsr = (ds.Answer || []).filter(r => r.type === 43);
+  const keys = (key.Answer || []).filter(r => r.type === 48).length;
+  const status = !dsr.length ? 'unsigned' : (a.Status === 2 && acd.Status === 0) ? 'bogus' : a.AD ? 'valid' : 'unknown';
+  return { domain: q, status, ds_records: dsr.map(r => r.data), dnskey_count: keys, validated_by_resolver: !!a.AD };
+}
+async function asnPrefixes(q) {
+  const m = /^(?:as)?(\d{1,10})$/i.exec(q);
+  if (!m) return [{ error: 'Enter an ASN like AS13335' }, 400];
+  const rs = k => fetch(`https://stat.ripe.net/data/${k}/data.json?resource=AS${m[1]}`, { signal: AbortSignal.timeout(10000) }).then(r => r.json()).then(j => j.data || {}).catch(() => ({}));
+  const [pf, ov] = await Promise.all([rs('announced-prefixes'), rs('as-overview')]);
+  const all = (pf.prefixes || []).map(x => x.prefix);
+  const v4 = all.filter(x => !x.includes(':')), v6 = all.filter(x => x.includes(':'));
+  if (!all.length) return [{ error: 'No announced prefixes found for this ASN' }, 404];
+  return [{ asn: 'AS' + m[1], holder: ov.holder, v4_count: v4.length, v6_count: v6.length, v4: v4.slice(0, 300), v6: v6.slice(0, 300) }, 200];
+}
+async function bgp(q) {
+  if (!/^[0-9a-f.:]+(\/\d{1,3})?$/i.test(q)) return [{ error: 'Enter an IP or prefix, like 1.1.1.0/24' }, 400];
+  const rs = k => fetch(`https://stat.ripe.net/data/${k}/data.json?resource=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(10000) }).then(r => r.json()).then(j => j.data || {}).catch(() => ({}));
+  const [st, lg] = await Promise.all([rs('routing-status'), rs('looking-glass')]);
+  const vis = st.visibility || {};
+  const paths = [];
+  for (const rrc of lg.rrcs || []) { const x = (rrc.peers || [])[0]; if (x) paths.push({ location: rrc.location || rrc.rrc, origin: x.asn_origin, path: x.as_path, prefix: x.prefix }); }
+  return [{ resource: q, origins: (st.origins || []).map(o => 'AS' + o.origin), first_seen: st.first_seen?.time, last_seen: st.last_seen?.time,
+    v4_peers_seeing: vis.v4 ? `${vis.v4.ris_peers_seeing} of ${vis.v4.total_ris_peers}` : undefined,
+    v6_peers_seeing: vis.v6 ? `${vis.v6.ris_peers_seeing} of ${vis.v6.total_ris_peers}` : undefined, paths: paths.slice(0, 14) }, 200];
+}
+async function ssl(q) {
+  const r = await fetch(`https://crt.sh/?q=${encodeURIComponent(q)}&output=json&exclude=expired`, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return [{ error: `crt.sh error (${r.status})` }, 502];
+  const rows = await r.json();
+  if (!rows.length) return [{ error: 'No active certificate found in certificate logs' }, 404];
+  rows.sort((a, b) => (b.not_before || '').localeCompare(a.not_before || ''));
+  const c = rows[0];
+  return [{ domain: q, issuer: c.issuer_name, valid_from: c.not_before, valid_to: c.not_after,
+    days_left: Math.floor((Date.parse(c.not_after + 'Z') - Date.now()) / 864e5), serial: c.serial_number,
+    sans: [...new Set(String(c.name_value).split('\n'))].slice(0, 40) }, 200];
+}
+async function oui(q) {
+  const hex = q.replace(/[:\-.\s]/g, '').toUpperCase();
+  if (!/^[0-9A-F]{6,12}$/.test(hex)) return [{ error: 'Enter a MAC address like 00:1A:2B:3C:4D:5E' }, 400];
+  const pre = hex.slice(0, 6).match(/../g).join(':');
+  const r = await fetch(`https://api.macvendors.com/${pre}`, { signal: AbortSignal.timeout(6000) });
+  if (r.status === 404) return [{ error: 'Vendor not found (it may be a private or randomized MAC)' }, 404];
+  if (!r.ok) return [{ error: `Lookup limit reached or unavailable (${r.status}). Try again in a few seconds` }, 502];
+  return [{ oui: pre, vendor: (await r.text()).trim() }, 200];
+}
+async function mtr(q) {
+  if (!(DOMAIN.test(q) || IPV4.test(q)) || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(q))
+    return [{ error: 'Enter a valid public domain or IPv4' }, 400];
+  const r = await fetch(`https://api.hackertarget.com/mtr/?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(28000) });
+  const t = await r.text();
+  const hops = t.split('\n').map(l => /^\s*(\d+)\.\|--\s+(\S+)\s+([\d.]+)%\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(l)).filter(Boolean)
+    .map(m => ({ hop: +m[1], host: m[2], loss: +m[3], sent: +m[4], last: +m[5], avg: +m[6], best: +m[7], worst: +m[8], stdev: +m[9] }));
+  if (!r.ok || !hops.length) return [{ error: (t.trim().split('\n')[0] || 'MTR service unavailable').slice(0, 140) }, 502];
+  return [{ target: q, hops }, 200];
+}
+
 export async function onRequestGet({ request, params }) {
   const url = new URL(request.url);
   const route = [].concat(params.path || [])[0];
@@ -211,5 +323,18 @@ export async function onRequestGet({ request, params }) {
     const [d, st] = await ipinfo(ip); return json(d, st);
   }
   if (route === 'ping') { const [d, st] = await ping(q); return json(d, st); }
+  if (route === 'prop') { const [d, st] = await prop(q, (url.searchParams.get('t') || 'A').toUpperCase()); return json(d, st); }
+  if (route === 'dnssec') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    return json(await dnssec(q));
+  }
+  if (route === 'asn') { const [d, st] = await asnPrefixes(q); return json(d, st); }
+  if (route === 'bgp') { const [d, st] = await bgp(q); return json(d, st); }
+  if (route === 'ssl') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    const [d, st] = await ssl(q); return json(d, st);
+  }
+  if (route === 'oui') { const [d, st] = await oui(q); return json(d, st); }
+  if (route === 'mtr') { const [d, st] = await mtr(q); return json(d, st); }
   return json({ error: 'Not found' }, 404);
 }
