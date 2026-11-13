@@ -44,6 +44,7 @@ tr:last-child td{border-bottom:0}
 .sp{display:inline-block;width:16px;height:16px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:r .7s linear infinite;vertical-align:-3px;margin-right:8px}
 @keyframes r{to{transform:rotate(360deg)}}
 .g rect{fill:var(--card);stroke:var(--bd)}.g line{stroke:var(--bd)}.g text{fill:var(--fg);font-size:11px}
+a{color:var(--ac)}
 footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 </style></head>
 <body>
@@ -63,7 +64,7 @@ footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const LAB={asn:'ASN',ip:'IP',tls:'TLS',http:'HTTP',cidr:'CIDR',loc:'Location',uag:'Browser',colo:'Datacenter'};
+const LAB={asn:'ASN',ip:'IP',tls:'TLS',http:'HTTP',cidr:'CIDR',loc:'Location',uag:'Browser',colo:'Datacenter',dnt:'Do Not Track',ip_type:'IP type',country_code:'Country code'};
 const lab=k=>LAB[k]||(k.charAt(0).toUpperCase()+k.slice(1).replace(/_/g,' '));
 const val=v=>typeof v==='boolean'?(v?'Yes':'No'):Array.isArray(v)?v.join(', '):v;
 const kv=o=>'<div class="kv">'+Object.entries(o).filter(([,v])=>v!=null&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`<div><span>${esc(lab(k))}</span><b>${esc(val(v))}</b></div>`).join('')+'</div>';
@@ -89,6 +90,13 @@ function graph(root,hosts,info){
  return `<div style="overflow-x:auto"><svg class="g" width="810" height="${H}" viewBox="0 0 810 ${H}">${L}${N}</svg></div><p class="mut">Left to right: website, its sub-sites, server addresses, hosting company.</p>`}
 const ECHO=['https://api.ipify.org?format=json','https://api64.ipify.org?format=json','https://icanhazip.com','https://ifconfig.me/ip','https://ipwho.is/','https://ipapi.co/json/','https://ipinfo.io/json','https://api.ip.sb/ip','https://1.1.1.1/cdn-cgi/trace','https://httpbin.org/ip'];
 
+// Anthropic Supported Regions Policy, effective Nov 12, 2026 (https://www.anthropic.com/legal/supported-regions)
+const SUP=new Set(('AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CO KM CG CD CR CI HR CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IQ IE IL IT JM JP JO KZ KE KI KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ NA NR NP NL NZ NI NE NG MK NO OM PK PW PS PA PG PY PE PH PL PT QA RO RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SO SB ZA KR SS ES LK SD SR SE CH TW TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VA VN ZM ZW').split(' '));
+const TERR={PR:'US',GU:'US',VI:'US',AS:'US',MP:'US',GP:'FR',MQ:'FR',GF:'FR',RE:'FR',YT:'FR',GI:'GB',IM:'GB',JE:'GB',GG:'GB',KY:'GB',BM:'GB',VG:'GB',AW:'NL',CW:'NL',GL:'DK',FO:'DK'};
+const lat=async u=>{let best=null;for(let i=0;i<2;i++){const t=performance.now();
+ try{await fetch(u,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:AbortSignal.timeout(8000)});const d=Math.round(performance.now()-t);best=best==null?d:Math.min(best,d)}catch{return best}}return best};
+const pill=(ok,t)=>`<span class="pill ${ok}">${t}</span>`;
+
 const T={
  ip:{i:'🌐',label:'My IP',title:'What is my IP address?',sub:'See the address websites see, and roughly where it is.',
   help:'Your <b>IP address</b> is like your home address on the internet. Websites use it to guess where you are. Using a VPN? Check here that it shows the VPN address and not your own. Press <b>Hide IP</b> before taking a screenshot.',
@@ -98,6 +106,26 @@ const T={
    catch{tr='<span class="mut">Only available on the deployed site.</span>'}
    const {ip,country,city,region,...rest}=d;
    return `<div class="card ipcard"><div class="mut">Your public IP address</div><div class="bigip" id="bigip">${esc(ip||'Unknown')}</div><div class="loc">${flag(country)} ${esc([city,region,country].filter(Boolean).join(', ')||'Location unknown')}</div><div class="acts"><button id="cp">Copy</button><button id="hd">Hide IP</button></div></div>`+card('Network details',kv(rest))+card('Cloudflare trace',tr)}},
+ claude:{i:'🤖',label:'Claude Check',title:'Claude connection check',sub:'Is this connection usable for Claude? Region, IP type and reachability in one place.',ph:'IP address (leave blank for yours)',opt:1,ex:['8.8.8.8'],
+  help:'Checks a connection for Claude: is the country on the <b>supported regions</b> list published by Anthropic, does the IP look like a <b>home</b> or <b>datacenter</b> address, are there <b>VPN / proxy / Tor</b> flags, can your browser reach <b>claude.ai</b>, and does <b>WebRTC</b> leak. All results are estimates and only informational.',
+  async run(v){
+   const [d,pl,l1,l2,w]=await Promise.all([api('ipinfo',v?{q:v}:{}).catch(e=>({error:e.message})),v?null:api('ip').catch(()=>null),lat('https://claude.ai/'),lat('https://www.anthropic.com/'),T.webrtc.run()]);
+   const cc=String(d.country_code||(!v&&pl?.country)||'').toUpperCase();
+   const ok=SUP.has(TERR[cc]||cc);
+   const reg=!cc?pill('mut','Unknown'):cc==='UA'?pill('warn','Partly supported')+' <span class="mut">(not Crimea, Donetsk, Kherson, Luhansk, Zaporizhzhia)</span>':ok?pill('ok','Supported'):pill('bad','Not supported');
+   const t=d.datacenter||d.network_type==='hosting'?'Datacenter':d.network_type==='isp'?'Residential / ISP':d.network_type==='business'?'Business':d.network_type||'Unknown';
+   const yn=(l,b)=>pill(b?'bad':'ok',l+': '+(b?'Yes':'No'));
+   const c=d.score>=80?'ok':d.score>=50?'warn':'bad';
+   const qual=d.error?`<b class="bad">${esc(d.error)}</b>`:
+    `<div class="score ${c}">${d.score}<small>/100</small></div><p class="mut">A simple estimate from public IP data, not an official Anthropic score.</p>`+
+    kv({ip:d.ip,asn:d.asn,org:d.org,ip_type:t,city:d.city,timezone:d.timezone})+
+    `<p>${yn('VPN',d.vpn)} ${yn('Proxy',d.proxy)} ${yn('Tor',d.tor)} ${yn('Crawler',d.crawler)} ${yn('Abuse',d.abuser)}</p>`;
+   const lt=n=>n==null?pill('bad','Unreachable'):pill(n<300?'ok':n<800?'warn':'bad',n+' ms');
+   const dev={timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,language:(navigator.languages||[navigator.language]).join(', '),browser:navigator.userAgent,touch:navigator.maxTouchPoints>0?'Yes':'No',network:navigator.connection?.effectiveType,dnt:navigator.doNotTrack==='1'?'On':'Off'};
+   return card('Region',`<p>${flag(cc)} <b>${esc(d.country||cc||'Unknown')}</b> ${reg}</p><p class="mut">Compared with Anthropic's official list (effective Nov 12, 2026). Lists change, so see the <a href="https://www.anthropic.com/legal/supported-regions" target="_blank" rel="noopener">official policy</a>.</p>`)
+    +card('IP quality',qual)
+    +card('Reachability from your browser',`<table><tr><td>claude.ai</td><td>${lt(l1)}</td></tr><tr><td>anthropic.com</td><td>${lt(l2)}</td></tr></table><p class="mut">Far from the US, 100 ms or more is normal.</p>`)
+    +w+card('Your device',kv(dev))}},
  map:{i:'🗺️',label:'Domain Map',title:'Domain map',sub:'Find the hidden sub-sites and servers behind a website.',ph:'example.com',ex:['github.com','cloudflare.com'],
   help:'Type a website name. We look for its <b>sub-sites</b> (like mail.example.com), the <b>server addresses</b> behind them, and <b>who hosts</b> them. The picture links them together so you can see the whole setup at a glance.',
   async run(v){

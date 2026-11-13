@@ -138,8 +138,8 @@ async function ipinfo(ip) {
     const score = Math.max(0, 100 - Object.entries(pen).reduce((t, [k, v]) => t + (d[k] ? v : 0), 0));
     return [{
       ip: d.ip || ip, score, asn: a.asn ? 'AS' + a.asn : undefined, org: a.org || c.name, route: a.route,
-      network_type: a.type || c.type, country: l.country, city: l.city,
-      datacenter: !!d.is_datacenter, vpn: !!d.is_vpn, proxy: !!d.is_proxy, tor: !!d.is_tor, abuser: !!d.is_abuser,
+      network_type: a.type || c.type, country: l.country, country_code: l.country_code, city: l.city, timezone: l.timezone,
+      datacenter: !!d.is_datacenter, vpn: !!d.is_vpn, proxy: !!d.is_proxy, tor: !!d.is_tor, abuser: !!d.is_abuser, crawler: !!d.is_crawler,
       abuse_score: c.abuser_score,
     }, 200];
   } catch { return [{ error: 'IP lookup unavailable' }, 502]; }
