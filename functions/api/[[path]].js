@@ -29,13 +29,49 @@ async function dns(q) {
   return Object.fromEntries(rows);
 }
 
+async function rdapGet(urls) {
+  let last = 'no response';
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, {
+        headers: { accept: 'application/rdap+json, application/json' },
+        redirect: 'follow', signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok) return [await r.json(), null];
+      last = r.status;
+    } catch (e) { last = e.name === 'TimeoutError' ? 'timeout' : 'network error'; }
+  }
+  return [null, last];
+}
+
+async function domainUrls(name) {
+  const urls = [];
+  try {
+    const r = await fetch('https://data.iana.org/rdap/dns.json', { cf: { cacheTtl: 86400, cacheEverything: true } });
+    const b = await r.json();
+    const svc = b.services.find(s => s[0].includes(name.split('.').pop()));
+    const base = svc && (svc[1].find(x => x.startsWith('https')) || svc[1][0]);
+    if (base) urls.push(base.replace(/\/?$/, '/') + 'domain/' + name);
+  } catch {}
+  urls.push(`https://rdap.org/domain/${name}`);
+  return urls;
+}
+
 async function whois(q) {
   const isIp = IPV4.test(q) || (q.includes(':') && IPV6.test(q));
   if (!isIp && !DOMAIN.test(q)) return [{ error: 'Enter a valid domain or IP' }, 400];
-  const r = await fetch(`https://rdap.org/${isIp ? 'ip' : 'domain'}/${encodeURIComponent(q)}`,
-    { headers: { accept: 'application/rdap+json' }, redirect: 'follow' });
-  if (!r.ok) return [{ error: 'No RDAP data for this query' }, 404];
-  const d = await r.json();
+  let d, err;
+  if (isIp) {
+    [d, err] = await rdapGet([`https://rdap.arin.net/registry/ip/${q}`, `https://rdap.org/ip/${q}`]);
+  } else {
+    // try the name, then its parent domains (e.g. www.example.com -> example.com)
+    const labels = q.split('.');
+    for (let i = 0; i < Math.min(3, labels.length - 1); i++) {
+      [d, err] = await rdapGet(await domainUrls(labels.slice(i).join('.')));
+      if (d) break;
+    }
+  }
+  if (!d) return [{ error: `No RDAP data (upstream: ${err})` }, 404];
   const ev = Object.fromEntries((d.events || []).map(e => [e.eventAction, e.eventDate]));
   if (isIp) {
     return [{
