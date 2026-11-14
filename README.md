@@ -45,17 +45,17 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 |---|---|---|
 | **Domain Map** | Sub-sites, server IPs, hosting networks, colored relationship graph, **Excel export** | crt.sh, Cloudflare DNS, ipapi.is |
 | **DNS** | A, AAAA, MX, NS, TXT, CNAME, SOA and CAA records | Cloudflare DNS over HTTPS |
-| **Whois** | Registrar, dates and name servers (domains) or owner (IPs) | RDAP registries |
+| **Whois** | Registrar, status locks, dates, age, name servers, contacts (domains, including .com.hk) or owner (IPs) | RDAP, WHOIS fallback |
 | **Propagation** | Ask Cloudflare, Google, Quad9 and OpenDNS at once | DNS over HTTPS |
-| **DNSSEC** | Signed, valid or broken chain of trust | Google Public DNS |
-| **SSL/TLS** | Expiry countdown, issuer and covered names | Certificate transparency (crt.sh) |
+| **DNSSEC** | Chain of trust root → TLD → domain, DS / DNSKEY / RRSIG details, independent DS check | Google Public DNS |
+| **SSL/TLS** | Certificate details, expiry, issuance history, live HTTPS / HSTS check | crt.sh + live check |
 
 ### 📡 Network
 | Tool | What it does | Data from |
 |---|---|---|
 | **Ping** | Latency from 10 locations worldwide | Globalping.io |
 | **Status** | Is a website up, and how fast? (up to 10 at once) | this site's Worker |
-| **MTR** | Hop-by-hop route with color-coded loss and delay | HackerTarget |
+| **MTR** | Hop-by-hop route from 3 worldwide probes, color-coded loss and delay | Globalping.io |
 | **ASN Prefixes** | Every IPv4 / IPv6 prefix a network announces | RIPEstat |
 | **BGP Route** | Route visibility, origin AS and sample AS paths | RIPEstat (RIS collectors) |
 
@@ -138,7 +138,7 @@ Investigate can show VirusTotal results for file hashes. Add your free API key a
 - Dashboard: **Workers & Pages → your Worker → Settings → Variables and Secrets → Add** → type *Secret*, name `VT_API_KEY`
 - or CLI: `npx wrangler secret put VT_API_KEY`
 
-Without the secret, everything else still works. Free VirusTotal limits: 4 requests/minute, 500/day.
+Open `/api/health` on your site to check: it should show `virustotal_key_found: true`. Without the secret, everything else still works. Free VirusTotal limits: 4 requests/minute, 500/day.
 
 ## 🔌 API
 
@@ -163,6 +163,7 @@ All endpoints are `GET /api/<name>` and return JSON.
 | `oui` | `q` (MAC) | MAC vendor |
 | `intel` | `q`, `t` (`ip`, `domain`, `hash`) | Shodan InternetDB / urlscan.io / CIRCL |
 | `vt` | `q` (hash) | VirusTotal (needs `VT_API_KEY`) |
+| `health` | - | Shows whether optional features (VirusTotal key) are configured |
 | `cve` | `q` | CVE details, EPSS, KEV |
 | `mailsec` | `q`, `sel` (DKIM selector, optional) | SPF / DKIM / DMARC |
 
@@ -205,7 +206,7 @@ Please do not add features that scan or attack third-party systems.
 
 ## 🙏 Acknowledgements
 
-Inspired by [ip.net.coffee](https://ip.net.coffee/) and [DNSdumpster](https://dnsdumpster.com/). Powered by free public services: Cloudflare, ipapi.is, Shodan InternetDB, urlscan.io, CIRCL hashlookup, VirusTotal, RIPEstat, Globalping, crt.sh, RDAP, Have I Been Pwned, NVD, FIRST EPSS, HackerTarget and macvendors.com. Excel export uses [SheetJS](https://sheetjs.com/).
+Inspired by [ip.net.coffee](https://ip.net.coffee/) and [DNSdumpster](https://dnsdumpster.com/). Powered by free public services: Cloudflare, ipapi.is, Shodan InternetDB, urlscan.io, CIRCL hashlookup, VirusTotal, RIPEstat, Globalping, crt.sh, RDAP, Have I Been Pwned, NVD, FIRST EPSS and macvendors.com. Excel export uses [SheetJS](https://sheetjs.com/).
 
 ## 📄 License
 

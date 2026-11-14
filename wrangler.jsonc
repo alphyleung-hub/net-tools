@@ -1,6 +1,7 @@
 {
   "name": "net-tools",
   "main": "src/index.js",
+  "keep_vars": true,
   "compatibility_date": "2026-11-10",
   "observability": { "enabled": true },
   "assets": {
