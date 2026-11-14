@@ -291,6 +291,67 @@ async function mtr(q) {
   return [{ target: q, hops }, 200];
 }
 
+async function intel(q, t) {
+  const get = u => fetch(u, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+  if (t === 'ip') {
+    const r = await get(`https://internetdb.shodan.io/${encodeURIComponent(q)}`);
+    if (r.status === 404) return [{ found: false }, 200];
+    if (!r.ok) return [{ error: `Shodan InternetDB error (${r.status})` }, 502];
+    const d = await r.json();
+    return [{ found: true, ports: d.ports, hostnames: d.hostnames, cpes: d.cpes, tags: d.tags, vulns: d.vulns }, 200];
+  }
+  if (t === 'hash') {
+    const r = await get(`https://hashlookup.circl.lu/lookup/${{ 32: 'md5', 40: 'sha1', 64: 'sha256' }[q.length]}/${q}`);
+    if (r.status === 404) return [{ found: false }, 200];
+    if (!r.ok) return [{ error: `CIRCL hashlookup error (${r.status})` }, 502];
+    const d = await r.json();
+    return [{ found: true, name: d.FileName, size: d.FileSize, trust: d['hashlookup:trust'], source: d.source }, 200];
+  }
+  const r = await get(`https://urlscan.io/api/v1/search/?q=${encodeURIComponent('domain:' + q)}&size=10`);
+  if (!r.ok) return [{ error: `urlscan.io error (${r.status})` }, 502];
+  const d = await r.json();
+  return [{ total: d.total, scans: (d.results || []).map(x => ({ time: x.task?.time, url: x.page?.url || x.task?.url, ip: x.page?.ip, country: x.page?.country, status: x.page?.status, id: x._id })) }, 200];
+}
+async function cve(id) {
+  if (!/^CVE-\d{4}-\d{4,7}$/.test(id)) return [{ error: 'Enter a CVE ID like CVE-2021-44228' }, 400];
+  const j = u => fetch(u, { signal: AbortSignal.timeout(9000) }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const [n, e] = await Promise.all([j(`https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${id}`), j(`https://api.first.org/data/v1/epss?cve=${id}`)]);
+  const c = n?.vulnerabilities?.[0]?.cve;
+  if (!c) return [{ error: 'CVE not found (or the NVD service is busy, try again)' }, 404];
+  const m = (c.metrics?.cvssMetricV31 || c.metrics?.cvssMetricV40 || c.metrics?.cvssMetricV30 || [])[0]?.cvssData || {};
+  const ep = e?.data?.[0];
+  return [{ id, published: c.published, modified: c.lastModified, description: (c.descriptions || []).find(x => x.lang === 'en')?.value,
+    cvss: m.baseScore, severity: m.baseSeverity, vector: m.vectorString, epss: ep ? +ep.epss : undefined, epss_percentile: ep ? +ep.percentile : undefined,
+    kev: c.cisaExploitAdd ? { added: c.cisaExploitAdd, due: c.cisaActionDue } : undefined,
+    references: (c.references || []).map(x => x.url).filter(x => /^https?:\/\//.test(x)).slice(0, 6) }, 200];
+}
+async function mailsec(q, sel) {
+  const txt = async n => {
+    try {
+      const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(n)}&type=TXT`, { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(5000) });
+      return ((await r.json()).Answer || []).filter(a => a.type === 16).map(a => a.data.replace(/^"|"$/g, '').replace(/" "/g, ''));
+    } catch { return []; }
+  };
+  const [root, dm, dk] = await Promise.all([txt(q), txt('_dmarc.' + q), sel ? txt(`${sel}._domainkey.${q}`) : []]);
+  const spf = root.find(x => /^v=spf1/i.test(x)), dmarc = dm.find(x => /^v=DMARC1/i.test(x));
+  const all = spf && /(?:^|\s)([+\-~?]?)all\b/i.exec(spf);
+  const tag = (x, k) => new RegExp(`(?:^|;)\\s*${k}=([^;]+)`, 'i').exec(x || '')?.[1]?.trim();
+  return { domain: q, spf: spf || null, spf_all: all ? (all[1] || '+') + 'all' : null, dmarc: dmarc || null,
+    dmarc_policy: tag(dmarc, 'p'), dmarc_subdomain_policy: tag(dmarc, 'sp'), dmarc_pct: tag(dmarc, 'pct'), dmarc_rua: tag(dmarc, 'rua'),
+    dkim_selector: sel || null, dkim: sel ? (dk[0] || null) : undefined };
+}
+async function headers(raw) {
+  const u = safeUrl(raw);
+  if (!u) return [{ error: 'Invalid or blocked URL' }, 400];
+  try {
+    const r = await fetch(u.href, { redirect: 'follow', signal: AbortSignal.timeout(8000), headers: { 'user-agent': 'NetTools-HeaderCheck/1.0' } });
+    const names = ['strict-transport-security', 'content-security-policy', 'x-frame-options', 'x-content-type-options', 'referrer-policy', 'permissions-policy'];
+    return [{ url: r.url, status: r.status, server: r.headers.get('server'), powered_by: r.headers.get('x-powered-by'),
+      checks: Object.fromEntries(names.map(n => [n, r.headers.get(n)])),
+      cookies: (r.headers.getSetCookie?.() || []).map(c => ({ name: c.split('=')[0], secure: /;\s*secure/i.test(c), httponly: /;\s*httponly/i.test(c), samesite: /;\s*samesite=/i.test(c) })) }, 200];
+  } catch { return [{ error: 'Could not reach the site' }, 502]; }
+}
+
 export async function onRequestGet({ request, params }) {
   const url = new URL(request.url);
   const route = [].concat(params.path || [])[0];
@@ -336,5 +397,19 @@ export async function onRequestGet({ request, params }) {
   }
   if (route === 'oui') { const [d, st] = await oui(q); return json(d, st); }
   if (route === 'mtr') { const [d, st] = await mtr(q); return json(d, st); }
+  if (route === 'intel') {
+    const t = url.searchParams.get('t');
+    const ok = t === 'ip' ? (IPV4.test(q) || (q.includes(':') && IPV6.test(q))) : t === 'hash' ? /^([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i.test(q) : t === 'domain' ? DOMAIN.test(q) : false;
+    if (!ok) return json({ error: 'Invalid indicator' }, 400);
+    const [d, st] = await intel(q, t); return json(d, st);
+  }
+  if (route === 'cve') { const [d, st] = await cve(q.toUpperCase()); return json(d, st); }
+  if (route === 'mailsec') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    const sel = (url.searchParams.get('sel') || '').toLowerCase();
+    if (sel && !/^[a-z0-9._-]{1,63}$/.test(sel)) return json({ error: 'Invalid DKIM selector' }, 400);
+    return json(await mailsec(q, sel));
+  }
+  if (route === 'headers') { const [d, st] = await headers((url.searchParams.get('url') || '').trim()); return json(d, st); }
   return json({ error: 'Not found' }, 404);
 }

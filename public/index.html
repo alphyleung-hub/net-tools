@@ -62,6 +62,8 @@ label{font-size:12px;color:var(--mut)}
 select,.kv input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit;margin-top:2px}
 .cfg{white-space:pre;overflow:auto;max-height:340px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;margin:0 0 10px}
 .pill.mx{color:#3b82f6}
+textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:13px/1.5 ui-monospace,Consolas,monospace;margin-top:2px;resize:vertical}
+.lnk{display:inline-block;margin:0 8px 8px 0;padding:5px 12px;border:1px solid var(--bd);border-radius:999px;text-decoration:none;font-size:14px}
 a{color:var(--ac)}
 footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 </style></head>
@@ -167,7 +169,31 @@ const GEN={
   fn:v=>{const ssh=/^y/i.test(v.ssh),l=x=>x.split(/[\s,]+/).filter(Boolean),tcp=l(v.tcp).filter(x=>!(ssh&&x==='22')),udp=l(v.udp);
    return `table inet filter {\n  chain input {\n    type filter hook input priority 0; policy drop;\n    ct state established,related accept\n    ct state invalid drop\n    iif lo accept\n    ip protocol icmp accept\n    ip6 nexthdr icmpv6 accept\n`+(ssh?'    tcp dport 22 ct state new limit rate 6/minute accept\n':'')+(tcp.length?`    tcp dport { ${tcp.join(', ')} } accept\n`:'')+(udp.length?`    udp dport { ${udp.join(', ')} } accept\n`:'')+'  }\n  chain forward {\n    type filter hook forward priority 0; policy drop;\n  }\n  chain output {\n    type filter hook output priority 0; policy accept;\n  }\n}'}}
 };
-const CATS={me:['🏠','Connection'],dom:['🌍','Domain & DNS'],net:['📡','Network'],tool:['🧮','Tools']};
+const refang=s=>s.replace(/hxxp/gi,'http').replace(/\[\.\]|\(\.\)|\[dot\]/gi,'.').replace(/\[:\]/g,':').replace(/\[@\]|\[at\]/gi,'@');
+const defang=s=>s.replace(/http/gi,'hxxp').replace(/\./g,'[.]').replace(/@/g,'[@]');
+const yn=(l,b)=>pill(b?'bad':'ok',l+': '+(b?'Yes':'No'));
+const lnks=a=>a.map(([l,u])=>`<a class="lnk" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(l)} ↗</a>`).join('');
+const HASH=/^([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i;
+function extractIOC(t){t=refang(t);const u=a=>[...new Set(a||[])].sort();
+ return{urls:u(t.match(/https?:\/\/[^\s"'<>)\]]+/gi)),ips:u(t.match(/\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g)),
+  domains:u((t.match(/\b(?:[a-z0-9-]{1,63}\.)+[a-z]{2,24}\b/gi)||[]).map(d=>d.toLowerCase()).filter(d=>!/\.(exe|dll|js|png|jpe?g|gif|css|html?|php|txt|zip|pdf|sys|bat|ps1|docx?|xlsx?|json|log)$/.test(d))),
+  emails:u(t.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi)),md5:u(t.match(/\b[a-f0-9]{32}\b/gi)),sha1:u(t.match(/\b[a-f0-9]{40}\b/gi)),sha256:u(t.match(/\b[a-f0-9]{64}\b/gi)),cves:u((t.match(/CVE-\d{4}-\d{4,7}/gi)||[]).map(x=>x.toUpperCase()))}}
+const b64b=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/').replace(/\s/g,'')),c=>c.charCodeAt(0));
+const OPS={
+ 'Base64 decode':s=>new TextDecoder().decode(b64b(s)),
+ 'Base64 decode (UTF-16, PowerShell)':s=>new TextDecoder('utf-16le').decode(b64b(s)),
+ 'Base64 encode':s=>{let o='';new TextEncoder().encode(s).forEach(c=>o+=String.fromCharCode(c));return btoa(o)},
+ 'Gunzip (Base64 input)':async s=>new Response(new Blob([b64b(s.trim())]).stream().pipeThrough(new DecompressionStream('gzip'))).text(),
+ 'URL decode':s=>decodeURIComponent(s.replace(/\+/g,' ')),'URL encode':encodeURIComponent,
+ 'Hex decode':s=>new TextDecoder().decode(Uint8Array.from(s.replace(/0x|\\x|[\s,:]/gi,'').match(/../g)||[],x=>parseInt(x,16))),
+ 'Hex encode':s=>[...new TextEncoder().encode(s)].map(b=>b.toString(16).padStart(2,'0')).join(' '),
+ 'HTML entities decode':s=>{const t=document.createElement('textarea');t.innerHTML=s;return t.value},
+ 'ROT13':s=>s.replace(/[a-z]/gi,c=>String.fromCharCode((c<='Z'?90:122)>=(c=c.charCodeAt(0)+13)?c:c-26)),
+ 'Reverse':s=>[...s].reverse().join(''),'Defang (safe to share)':defang,'Refang':refang};
+async function digest(a,s){return[...new Uint8Array(await crypto.subtle.digest(a,new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function jwtDecode(t){const p=t.trim().split('.');if(p.length<2)throw new Error('A JWT has 3 parts separated by dots');
+ const dj=s=>{try{return JSON.parse(new TextDecoder().decode(b64b(s+'='.repeat((4-s.length%4)%4))))}catch{throw new Error('Not a valid JWT')}};return{h:dj(p[0]),b:dj(p[1]),sig:p[2]||''}}
+const CATS={me:['🏠','Connection'],dom:['🌍','Domain & DNS'],net:['📡','Network'],sec:['🛡️','Security'],tool:['🧮','Tools']};
 
 const T={
  ip:{cat:'me',i:'🌐',label:'My IP',title:'What is my IP address?',sub:'See the address websites see, and roughly where it is.',
@@ -318,7 +344,72 @@ const T={
   after(){const u=()=>{const g=GEN[$('#g0').value],v={};document.querySelectorAll('#gf input').forEach(i=>v[i.dataset.k]=i.value.trim());
     $('#gout').innerHTML=card('Generated config',`<div class="cfg" id="cfgout">${esc(g.fn(v))}</div><button id="cpg">Copy</button>`)};
    const r=()=>{const g=GEN[$('#g0').value];$('#gf').innerHTML=g.f.map(([k,l,d])=>`<label>${esc(l)}<input data-k="${k}" value="${esc(d)}"></label>`).join('');u()};
-   $('#g0').onchange=r;$('#gf').oninput=u;r()}}
+   $('#g0').onchange=r;$('#gf').oninput=u;r()}},
+ inv:{cat:'sec',i:'🔎',label:'Investigate',title:'Investigate an indicator',sub:'Paste an IP, domain, URL or file hash for a quick picture and one-click pivots.',ph:'IP, domain, URL or hash (defanged is fine)',ex:['8.8.8.8','example.com','hxxps://example[.]com/login','44d88612fea8a8f36de82e1278abb02f'],
+  help:'<b>How to use it:</b> phishing link? paste the URL. Suspicious file? paste its <b>hash</b> (search by hash first, do not upload private files). Found an odd IP in logs? paste it. You get free data (Shodan InternetDB, urlscan.io history, known-file database) plus buttons to open VirusTotal, urlscan, ANY.RUN and more. The indicator is sent to those third-party services.',
+  async run(v){const x=refang(v.trim());let t,host=x;
+   if(ipn(x))t='ip';else if(HASH.test(x))t='hash';else if(/^https?:\/\//i.test(x)){try{host=new URL(x).hostname}catch{throw new Error('Invalid URL')}t=ipn(host)?'ip':'domain'}
+   else if(/^[a-z0-9.-]+\.[a-z0-9-]{2,}$/i.test(x)){t='domain';host=x.toLowerCase()}else throw new Error('Enter an IP, domain, URL or file hash');
+   const e=encodeURIComponent,isUrl=/^https?:\/\//i.test(x);let body='',links=[];
+   if(t==='ip'||t==='domain'){const q=t==='ip'?x:host;
+    if(t==='ip'){const[d,i]=await Promise.all([api('intel',{q,t:'ip'}).catch(e=>({error:e.message})),api('ipinfo',{q}).catch(()=>null)]);
+     body+=card('Exposure (Shodan InternetDB)',d.error?`<span class="bad">${esc(d.error)}</span>`:d.found?kv({open_ports:d.ports,hostnames:d.hostnames,tags:d.tags,software:d.cpes,known_vulns:(d.vulns||[]).slice(0,25)}):'<span class="mut">Shodan has no record of this IP.</span>');
+     if(i&&!i.error)body+=card('IP reputation signals',`<p>${yn('VPN',i.vpn)} ${yn('Proxy',i.proxy)} ${yn('Tor',i.tor)} ${yn('Datacenter',i.datacenter)} ${yn('Abuse',i.abuser)}</p>`+kv({asn:i.asn,org:i.org,country:i.country,network_type:i.network_type}))}
+    else{const d=await api('intel',{q,t:'domain'}).catch(e=>({error:e.message}));
+     body+=card('urlscan.io history',d.error?`<span class="bad">${esc(d.error)}</span>`:d.scans.length?`<p class="mut">${d.total} public scans found, showing ${d.scans.length}.</p><table>${d.scans.map(s=>`<tr><td class="mut">${esc((s.time||'').slice(0,10))}</td><td>${esc(cut(s.url||'',50))}</td><td>${esc(s.ip||'')}</td><td>${esc(s.country||'')}</td><td>${/^[0-9a-f-]{36}$/.test(s.id||'')?lnks([['Report','https://urlscan.io/result/'+s.id+'/']]):''}</td></tr>`).join('')}</table>`:'<span class="mut">No public scans found.</span>')}
+    links=t==='ip'?[['VirusTotal','https://www.virustotal.com/gui/ip-address/'+e(q)],['Shodan','https://www.shodan.io/host/'+e(q)],['AbuseIPDB','https://www.abuseipdb.com/check/'+e(q)],['urlscan','https://urlscan.io/ip/'+e(q)],['GreyNoise','https://viz.greynoise.io/ip/'+e(q)]]
+     :[['VirusTotal','https://www.virustotal.com/gui/domain/'+e(q)],['urlscan','https://urlscan.io/domain/'+e(q)],['crt.sh','https://crt.sh/?q='+e(q)],['Shodan','https://www.shodan.io/search?query=hostname%3A'+e(q)],['ANY.RUN (submit URL)','https://app.any.run/']]}
+   else{const d=await api('intel',{q:x,t:'hash'}).catch(e=>({error:e.message}));
+    body+=card('Known-file database (CIRCL hashlookup)',d.error?`<span class="bad">${esc(d.error)}</span>`:d.found?'<b class="ok">Known file</b>'+kv({name:d.name,size:d.size,trust:d.trust,source:d.source}):'<span class="mut">Not in the known-good database. That does not mean it is malicious: check VirusTotal below.</span>');
+    links=[['VirusTotal','https://www.virustotal.com/gui/file/'+e(x)],['MalwareBazaar','https://bazaar.abuse.ch/browse.php?search='+e(x)],['ANY.RUN','https://app.any.run/submissions/#filehash:'+e(x)]]}
+   return card('Indicator',kv({type:t==='hash'?'File hash':isUrl?'URL (host: '+host+')':t==='ip'?'IP address':'Domain',defanged:defang(x)}))+body+card('Open in other tools',lnks(links))}},
+ mail:{cat:'sec',i:'✉️',label:'Email Security',title:'Email security check',sub:'SPF, DKIM and DMARC: can someone spoof this domain?',ph:'example.com (optional DKIM selector: example.com selector1)',ex:['google.com','github.com'],
+  help:'These three DNS records stop others from sending fake email as your domain. <b>SPF</b> lists allowed mail servers, <b>DMARC</b> says what to do with fakes (<b>reject</b> is strongest, <b>none</b> only monitors), and <b>DKIM</b> signs messages. DKIM needs a <b>selector</b> name (find it in an email header, e.g. selector1 or google).',
+  async run(v){const[q,sel]=v.trim().split(/\s+/),d=await api('mailsec',sel?{q,sel}:{q});
+   const sp=!d.spf?['bad','Missing']:d.spf_all==='-all'?['ok','Strict (-all)']:d.spf_all==='~all'?['warn','Soft fail (~all)']:['bad','Weak ('+(d.spf_all||'no "all"')+')'];
+   const dm=!d.dmarc?['bad','Missing']:d.dmarc_policy==='reject'?['ok','Reject']:d.dmarc_policy==='quarantine'?['ok','Quarantine']:['warn','Monitor only (p=none)'];
+   return card('SPF',pill(sp[0],sp[1])+(d.spf?`<div class="cfg" style="margin-top:10px">${esc(d.spf)}</div>`:''))
+    +card('DMARC',pill(dm[0],dm[1])+(d.dmarc?`<div class="cfg" style="margin-top:10px">${esc(d.dmarc)}</div>`+kv({subdomain_policy:d.dmarc_subdomain_policy,percent:d.dmarc_pct,report_address:d.dmarc_rua}):''))
+    +card('DKIM',d.dkim_selector?(d.dkim?pill('ok','Found')+`<div class="cfg" style="margin-top:10px">${esc(cut(d.dkim,300))}</div>`:pill('bad','Not found for selector '+esc(d.dkim_selector))):'<span class="mut">Add a selector after the domain to check DKIM.</span>')}},
+ hdr:{cat:'sec',i:'🧱',label:'Security Headers',title:'HTTP security headers',sub:'Does a website send the headers that protect its visitors?',ph:'https://example.com',ex:['github.com','google.com'],
+  help:'Browsers can block many attacks (clickjacking, script injection, downgrade to HTTP) when a site sends the right <b>headers</b>. Missing ones are shown in yellow. We only read the headers the site sends publicly.',
+  async run(v){const d=await api('headers',{url:v}),n=Object.values(d.checks).filter(Boolean).length,c=n>=5?'ok':n>=3?'warn':'bad';
+   const rows=Object.entries(d.checks).map(([k,x])=>`<tr><td><b>${esc(k)}</b></td><td>${x?pill('ok','Present'):pill('warn','Missing')}</td><td class="mut">${esc(cut(x||'',70))}</td></tr>`).join('');
+   const ck=d.cookies.length?`<table>${d.cookies.map(x=>`<tr><td>${esc(x.name)}</td><td>${yn('Secure',!x.secure).replace(/Yes/,'Missing').replace(/No/,'OK')}</td></tr>`).join('')}</table>`:'<span class="mut">No cookies set.</span>';
+   return card('Score',`<div class="score ${c}">${n}<small>/6 headers</small></div><p class="mut">${esc(d.url)} (HTTP ${d.status})</p>`+kv({server:d.server,powered_by:d.powered_by}))+card('Headers',`<table>${rows}</table>`)+card('Cookies',ck)}},
+ cve:{cat:'sec',i:'🐞',label:'CVE Lookup',title:'CVE lookup',sub:'Severity, exploit likelihood and whether it is actively exploited.',ph:'CVE-2021-44228',ex:['CVE-2021-44228','CVE-2024-3400'],
+  help:'<b>CVSS</b> rates how severe a flaw is (0 to 10). <b>EPSS</b> estimates the chance it will be exploited in the next 30 days. <b>KEV</b> means CISA confirmed it is being exploited in real attacks, so patch those first. Data from NVD and FIRST.',
+  async run(v){const d=await api('cve',{q:v}),c=d.cvss>=7?'bad':d.cvss>=4?'warn':'ok';
+   return card(d.id,`<div class="score ${c}">${d.cvss??'?'}<small>/10 ${esc(d.severity||'')}</small></div>`+(d.kev?`<p>${pill('bad','Actively exploited (CISA KEV)')} <span class="mut">added ${esc(d.kev.added)}, fix due ${esc(d.kev.due)}</span></p>`:'')+`<p>${esc(d.description||'')}</p>`)
+    +card('Details',kv({exploit_probability_epss:d.epss!=null?(d.epss*100).toFixed(2)+'% (top '+((1-d.epss_percentile)*100).toFixed(1)+'%)':undefined,vector:d.vector,published:d.published,last_modified:d.modified}))+card('References',lnks(d.references.map(u=>[cut(u.replace(/^https?:\/\//,''),38),u])))}},
+ dec:{cat:'sec',i:'🧪',label:'Decoder',title:'Decoder (CyberChef-lite)',sub:'Decode or encode strings. Everything stays in your browser.',
+  help:'Pick an operation and press <b>Apply</b>. Use <b>Use output as input</b> to chain steps, for example Base64 decode, then URL decode. Handy for obfuscated URLs, PowerShell <code>-enc</code> commands and gzip+Base64 payloads. <b>Nothing is sent to a server.</b>',
+  run:()=>`<div class="card"><label>Input<textarea id="d1" rows="5"></textarea></label><div class="acts" style="justify-content:flex-start;flex-wrap:wrap;margin:12px 0"><select id="d2" style="width:auto">${Object.keys(OPS).map(k=>`<option>${esc(k)}</option>`).join('')}</select><button id="d3" style="background:var(--ac);color:#fff;border-color:var(--ac)">Apply</button><button id="d4">Use output as input</button></div><label>Output<textarea id="d5" rows="5" readonly></textarea></label></div>`,
+  after(){$('#d3').onclick=async()=>{try{$('#d5').value=await OPS[$('#d2').value]($('#d1').value)}catch(e){$('#d5').value='Error: '+e.message}};$('#d4').onclick=()=>{$('#d1').value=$('#d5').value}}},
+ ioc:{cat:'sec',i:'🎯',label:'IOC Extractor',title:'IOC extractor',sub:'Pull IPs, domains, URLs, emails, hashes and CVEs out of any text.',
+  help:'Paste a log, email, report or script. We list every <b>indicator of compromise</b> found, without duplicates. Defanged text like <code>hxxp://evil[.]com</code> is understood. Tick <b>Defang</b> to make the output safe to share. <b>Nothing is sent to a server.</b>',
+  run:()=>`<div class="card"><label>Text<textarea id="i1" rows="7"></textarea></label><div class="acts" style="justify-content:flex-start;margin-top:12px"><button id="i3" style="background:var(--ac);color:#fff;border-color:var(--ac)">Extract</button><label style="align-self:center"><input type="checkbox" id="i2"> Defang output</label></div></div><div id="io"></div>`,
+  after(){$('#i3').onclick=()=>{const r=extractIOC($('#i1').value),df=$('#i2').checked,names={urls:'URLs',ips:'IPv4 addresses',domains:'Domains',emails:'Emails',md5:'MD5',sha1:'SHA-1',sha256:'SHA-256',cves:'CVEs'};
+    const out=Object.entries(r).filter(([,a])=>a.length).map(([k,a])=>card(names[k]+' ('+a.length+')',`<div class="cfg">${esc((df&&['urls','ips','domains','emails'].includes(k)?a.map(defang):a).join('\n'))}</div>`)).join('');
+    $('#io').innerHTML=out||card('Result','<span class="mut">No indicators found.</span>')}}},
+ hash:{cat:'sec',i:'#️⃣',label:'Hash',title:'Hash calculator',sub:'SHA-1, SHA-256, SHA-384 and SHA-512 of any text.',
+  help:'A <b>hash</b> is a fingerprint of data: the same text always gives the same hash, and a tiny change gives a completely different one. Type or paste text below. MD5 is not available because browsers no longer include it. <b>Nothing is sent to a server.</b>',
+  run:()=>`<div class="card"><label>Text<textarea id="h1" rows="5"></textarea></label></div><div id="ho"></div>`,
+  after(){const c=async()=>{const t=$('#h1').value,r=await Promise.all(['SHA-1','SHA-256','SHA-384','SHA-512'].map(a=>digest(a,t)));
+    $('#ho').innerHTML=card('Hashes',kv({'SHA-1':r[0],'SHA-256':r[1],'SHA-384':r[2],'SHA-512':r[3],bytes:new TextEncoder().encode(t).length}))};$('#h1').oninput=c;c()}},
+ jwt:{cat:'sec',i:'🎫',label:'JWT Decoder',title:'JWT decoder',sub:'Read the contents of a JSON Web Token.',ph:'eyJhbGciOiJIUzI1NiIs...',
+  help:'A <b>JWT</b> is a login token with three parts. We decode the header and payload so you can read them and see when it expires. The <b>signature is not verified</b> here, so never treat a decoded token as trusted. Decoding happens in your browser; <b>nothing is sent to a server</b>.',
+  async run(v){const{h,b,sig}=jwtDecode(v),tm=k=>b[k]?new Date(b[k]*1000).toISOString().replace('T',' ').slice(0,19)+' UTC':undefined;
+   const st=b.exp?(b.exp*1000<Date.now()?pill('bad','Expired'):pill('ok','Not expired')):'',pj=o=>`<div class="cfg">${esc(JSON.stringify(o,null,2))}</div>`;
+   return (String(h.alg).toLowerCase()==='none'?card('Warning','<b class="bad">alg is "none": this token is not signed.</b>'):'')+card('Header',pj(h))+card('Payload',pj(b))+card('Times',kv({issued_at:tm('iat'),not_before:tm('nbf'),expires:tm('exp')})+st)+card('Signature',`<span class="mut">${sig?'Present (not verified)':'Missing'}</span>`)}},
+ pwn:{cat:'sec',i:'🔑',label:'Password Check',title:'Password breach check',sub:'Has this password appeared in a known data breach?',
+  help:'Your password is hashed <b>in your browser</b> and only the <b>first 5 characters of the hash</b> are sent to the Have I Been Pwned range service, which cannot tell which password you meant. If it appears in breaches, never use it again.',
+  run:()=>`<div class="card"><label>Password<input id="p1" type="password" autocomplete="off" style="width:100%;padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg);font:inherit;margin-top:2px"></label><div class="acts" style="justify-content:flex-start;margin-top:12px"><button id="p2" style="background:var(--ac);color:#fff;border-color:var(--ac)">Check</button></div></div><div id="po"></div>`,
+  after(){$('#p2').onclick=async()=>{const pw=$('#p1').value;if(!pw)return;$('#po').innerHTML='<div class="card mut"><span class="sp"></span>Checking…</div>';
+    try{const h=(await digest('SHA-1',pw)).toUpperCase(),r=await fetch('https://api.pwnedpasswords.com/range/'+h.slice(0,5),{headers:{'Add-Padding':'true'}});if(!r.ok)throw new Error('Service unavailable ('+r.status+')');
+     const m=(await r.text()).split('\n').map(l=>l.trim().split(':')).find(([s])=>s===h.slice(5)),n=m?+m[1]:0;
+     $('#po').innerHTML=card('Result',n>0?`<b class="bad">Found in ${n.toLocaleString()} breaches. Do not use this password.</b>`:'<b class="ok">Not found in known breaches.</b><p class="mut">That does not guarantee it is strong. Use a long, unique password.</p>')}
+    catch(e){$('#po').innerHTML=card('Error',`<b class="bad">${esc(e.message)}</b>`)}}}}
 };
 
 const nav=$('#nav'),f=$('#f'),q=$('#q'),out=$('#out');let cur;
