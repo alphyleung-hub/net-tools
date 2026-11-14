@@ -6,7 +6,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       const route = url.pathname.split('/')[2];
-      return onRequestGet({ request, params: { path: [route] } });
+      return onRequestGet({ request, params: { path: [route] }, env });
     }
     return env.ASSETS.fetch(request);
   },

@@ -352,7 +352,26 @@ async function headers(raw) {
   } catch { return [{ error: 'Could not reach the site' }, 502]; }
 }
 
-export async function onRequestGet({ request, params }) {
+async function vt(q, env) {
+  if (!/^([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i.test(q)) return [{ error: 'Enter an MD5, SHA-1 or SHA-256 hash' }, 400];
+  if (!env?.VT_API_KEY) return [{ error: 'VirusTotal is not set up on this site yet' }, 503];
+  const r = await fetch(`https://www.virustotal.com/api/v3/files/${q}`, {
+    headers: { 'x-apikey': env.VT_API_KEY, accept: 'application/json' }, signal: AbortSignal.timeout(10000),
+    cf: { cacheTtl: 3600, cacheEverything: true },
+  });
+  if (r.status === 404) return [{ found: false }, 200];
+  if (r.status === 429) return [{ error: 'VirusTotal free limit reached (4 per minute, 500 per day). Try again soon' }, 429];
+  if (r.status === 401 || r.status === 403) return [{ error: 'VirusTotal rejected the API key' }, 502];
+  if (!r.ok) return [{ error: `VirusTotal error (${r.status})` }, 502];
+  const a = (await r.json()).data?.attributes || {}, st = a.last_analysis_stats || {};
+  const day = t => t ? new Date(t * 1000).toISOString().slice(0, 10) : undefined;
+  const total = (st.malicious || 0) + (st.suspicious || 0) + (st.harmless || 0) + (st.undetected || 0);
+  return [{ found: true, malicious: st.malicious || 0, suspicious: st.suspicious || 0, total, name: a.meaningful_name, type: a.type_description,
+    size: a.size, threat_label: a.popular_threat_classification?.suggested_threat_label, first_seen: day(a.first_submission_date),
+    last_analysis: day(a.last_analysis_date), tags: (a.tags || []).slice(0, 8) }, 200];
+}
+
+export async function onRequestGet({ request, params, env }) {
   const url = new URL(request.url);
   const route = [].concat(params.path || [])[0];
   const q = (url.searchParams.get('q') || url.searchParams.get('url') || '').trim().toLowerCase().replace(/\.$/, '');
@@ -411,5 +430,10 @@ export async function onRequestGet({ request, params }) {
     return json(await mailsec(q, sel));
   }
   if (route === 'headers') { const [d, st] = await headers((url.searchParams.get('url') || '').trim()); return json(d, st); }
+  if (route === 'vt') {
+    const sfs = request.headers.get('sec-fetch-site');
+    if (sfs && sfs !== 'same-origin') return json({ error: 'Not allowed' }, 403);
+    const [d, st] = await vt(q, env); return json(d, st);
+  }
   return json({ error: 'Not found' }, 404);
 }

@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Net Tools - IP, DNS and network checks</title>
+<title>Net Tools - Free network and security toolbox</title>
+<meta name="description" content="Free online tools for IP, DNS, domains, networks, subnets and security investigation. Many tools run entirely in your browser.">
 <style>
 :root{--bg:#f4f6fa;--card:#fff;--fg:#1f2937;--mut:#6b7280;--bd:#e5e7eb;--ac:#2563eb;--acs:#eff4ff;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--sh:0 1px 3px rgba(16,24,40,.07)}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0e1116;--card:#161b22;--fg:#e6edf3;--mut:#8b949e;--bd:#2a313b;--ac:#58a6ff;--acs:#12233a;--ok:#3fb950;--bad:#f85149;--warn:#e3a03a;--sh:none}}
@@ -61,6 +62,12 @@ tr:last-child td{border-bottom:0}
 label{font-size:12px;color:var(--mut)}
 select,.kv input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit;margin-top:2px}
 .cfg{white-space:pre;overflow:auto;max-height:340px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;margin:0 0 10px}
+.logo small{font-weight:400;font-size:13px;color:var(--mut);margin-left:8px}
+@media(max-width:700px){.logo small{display:none}}
+.catd{max-width:960px;margin:0 auto;padding:0 16px 10px;font-size:13px;color:var(--mut)}
+.src{margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd);font-size:13px;color:var(--mut)}
+.srcs{max-width:960px;margin:0 auto 12px;text-align:left}.srcs summary{cursor:pointer;color:var(--ac);text-align:center}
+.srcs table{margin-top:8px;font-size:13px}.srcs p{margin:8px 0}
 .pill.mx{color:#3b82f6}
 textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:13px/1.5 ui-monospace,Consolas,monospace;margin-top:2px;resize:vertical}
 .lnk{display:inline-block;margin:0 8px 8px 0;padding:5px 12px;border:1px solid var(--bd);border-radius:999px;text-decoration:none;font-size:14px}
@@ -69,10 +76,11 @@ footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 </style></head>
 <body>
 <header>
- <div class="bar"><div class="logo">Net<span>Tools</span></div>
+ <div class="bar"><div class="logo">Net<span>Tools</span><small>Free network and security toolbox</small></div>
   <div class="seg" id="th"><button data-t="light" title="Light">☀️</button><button data-t="dark" title="Dark">🌙</button><button data-t="auto" title="Follow system">Auto</button></div></div>
  <div class="cats" id="cats"></div>
  <nav id="nav"></nav>
+ <div class="catd" id="catd"></div>
 </header>
 <main>
  <h2 id="ttl"></h2><p class="sub" id="sub"></p>
@@ -81,7 +89,7 @@ footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
  <div class="ex" id="ex"></div>
  <div id="out"></div>
 </main>
-<footer>For testing only. Data from Cloudflare, ipapi.is, Globalping, crt.sh and RDAP.</footer>
+<footer><details class="srcs"><summary>Where does the data come from?</summary><p>What you type is sent to this site server (a Cloudflare Worker), which asks the free services listed below. Tools marked 🔒 never send anything. <b>Shodan InternetDB</b> is used only by <b>Investigate</b>, for IP addresses; the other tools use the websites and services shown.</p><div id="srclist"></div></details><p>For testing only. Free tools built on public data.</p></footer>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -193,7 +201,41 @@ const OPS={
 async function digest(a,s){return[...new Uint8Array(await crypto.subtle.digest(a,new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('')}
 function jwtDecode(t){const p=t.trim().split('.');if(p.length<2)throw new Error('A JWT has 3 parts separated by dots');
  const dj=s=>{try{return JSON.parse(new TextDecoder().decode(b64b(s+'='.repeat((4-s.length%4)%4))))}catch{throw new Error('Not a valid JWT')}};return{h:dj(p[0]),b:dj(p[1]),sig:p[2]||''}}
-const CATS={me:['🏠','Connection'],dom:['🌍','Domain & DNS'],net:['📡','Network'],sec:['🛡️','Security'],tool:['🧮','Tools']};
+let REP='',REPN='';
+const save=(name,text,type='text/plain')=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()};
+function ioctype(x){if(ipn(x))return{t:'ip',host:x};if(HASH.test(x))return{t:'hash',host:x};
+ if(/^https?:\/\//i.test(x)){try{const h=new URL(x).hostname;return{t:ipn(h)?'ip':'domain',host:h,url:true}}catch{return null}}
+ if(/^[a-z0-9.-]+\.[a-z0-9-]{2,}$/i.test(x))return{t:'domain',host:x.toLowerCase()};return null}
+const NEXT={ip:['Search firewall, proxy and VPN logs for this IP','Compare with AbuseIPDB and GreyNoise (links in the Investigate tool)','Block or monitor it only after malicious activity is confirmed'],
+ domain:['Open the urlscan reports and check redirects and requested hosts','Search DNS and proxy logs for lookups of this domain','Block it at the DNS filter or proxy if it is confirmed malicious'],
+ hash:['Search your EDR or file logs for this hash','Do not upload private files: use the hash first','Quarantine the file if the detections are confirmed']};
+const wl={get(){try{return JSON.parse(localStorage.getItem('nt_watch')||'[]')}catch{return[]}},set(a){try{localStorage.setItem('nt_watch',JSON.stringify(a))}catch{}},
+ add(v){v=refang(v.trim());const c=ioctype(v);if(!c)return false;const a=this.get();if(a.some(x=>x.v===v))return false;a.unshift({v,t:c.t,ts:Date.now()});this.set(a.slice(0,200));return true},
+ del(v){this.set(this.get().filter(x=>x.v!==v))}};
+function drawWatch(){const a=wl.get();$('#wl').innerHTML=card('Saved indicators ('+a.length+')',a.length?`<table>${a.map(x=>`<tr><td>${pill('mut',esc(x.t))}</td><td>${esc(cut(defang(x.v),60))}</td><td class="mut">${esc(new Date(x.ts).toISOString().slice(0,10))}</td><td><button data-w="inv" data-v="${esc(x.v)}">Investigate</button> <button data-w="del" data-v="${esc(x.v)}">Remove</button></td></tr>`).join('')}</table><p><button data-w="csv">Export CSV</button> <button data-w="clr">Clear all</button></p>`:'<span class="mut">Nothing saved yet. Add indicators above, or press "Add to watchlist" in Investigate.</span>')}
+function openInv(v){pick('inv');q.value=v;go()}
+function wAct(b){const a=b.dataset.w,v=b.dataset.v;
+ if(a==='add'){wl.add(v);b.textContent='Saved ✓';b.disabled=true}
+ else if(a==='inv')openInv(v);
+ else if(a==='del'){wl.del(v);drawWatch()}
+ else if(a==='clr'){if(confirm('Clear the whole watchlist?')){wl.set([]);drawWatch()}}
+ else if(a==='csv')save('watchlist.csv','\ufeff'+['Type,Indicator (defanged),Added'].concat(wl.get().map(x=>[x.t,defang(x.v),new Date(x.ts).toISOString()].map(c=>'"'+c.replace(/"/g,'""')+'"').join(','))).join('\n'),'text/csv')}
+const LOCAL=['dec','ioc','hash','jwt','subnet','range','bw','gen','watch'];
+const SRC={ip:'Cloudflare (your connection data, read by this site) and the Cloudflare trace endpoint',
+ claude:'ipapi.is for IP quality, Anthropic supported regions policy (list built in), and your browser for reachability, WebRTC and device info',
+ score:'ipapi.is (IP type and risk flags)',split:'public IP-echo sites (ipify, icanhazip, ifconfig.me, ipwho.is, ipapi.co, ipinfo.io, ip.sb, Cloudflare, httpbin), called from your browser',
+ webrtc:'your browser and a Google STUN server',map:'certificate logs (crt.sh, Certspotter as backup), Cloudflare DNS, ipapi.is',dns:'Cloudflare DNS over HTTPS',
+ whois:'RDAP registries (found through the IANA list; ARIN for IP addresses)',prop:'Cloudflare, Google, Quad9 and OpenDNS (DNS over HTTPS)',dnssec:'Google Public DNS',
+ ssl:'certificate transparency logs (crt.sh)',ping:'Globalping.io probes around the world',status:'this site server visits the URL you enter',mtr:'HackerTarget MTR service',
+ asn:'RIPEstat',bgp:'RIPEstat (RIPE RIS route collectors)',oui:'macvendors.com',
+ inv:'Shodan InternetDB (IP addresses), urlscan.io (domains and URLs), CIRCL hashlookup and VirusTotal (hashes), ipapi.is (IP risk flags)',
+ mail:'Cloudflare DNS over HTTPS',hdr:'this site server visits the URL you enter',cve:'NIST NVD (including the CISA KEV flag) and FIRST EPSS',pwn:'Have I Been Pwned (only the first 5 characters of the password hash are sent)'};
+const srcLine=id=>`<div class="src">${LOCAL.includes(id)?'🔒 <b>Runs in your browser.</b> Nothing you type here is sent anywhere.':'📡 <b>Data from:</b> '+esc(SRC[id]||'')+'.'}</div>`;
+const CATS={me:['🏠','Connection','See your IP address, location and how websites and Claude see your connection.'],
+ dom:['🌍','Domain & DNS','Look up the records, certificates, owner and hidden sub-sites of any domain.'],
+ net:['📡','Network','Test speed and routes, check website status and explore networks and BGP routing.'],
+ sec:['🛡️','Security','Investigate suspicious indicators, check email and web security, and decode data safely.'],
+ tool:['🧮','Tools','Calculators and generators: subnets, CIDR ranges, transfer time, MAC vendors and configs.']};
 
 const T={
  ip:{cat:'me',i:'🌐',label:'My IP',title:'What is my IP address?',sub:'See the address websites see, and roughly where it is.',
@@ -345,24 +387,36 @@ const T={
     $('#gout').innerHTML=card('Generated config',`<div class="cfg" id="cfgout">${esc(g.fn(v))}</div><button id="cpg">Copy</button>`)};
    const r=()=>{const g=GEN[$('#g0').value];$('#gf').innerHTML=g.f.map(([k,l,d])=>`<label>${esc(l)}<input data-k="${k}" value="${esc(d)}"></label>`).join('');u()};
    $('#g0').onchange=r;$('#gf').oninput=u;r()}},
- inv:{cat:'sec',i:'🔎',label:'Investigate',title:'Investigate an indicator',sub:'Paste an IP, domain, URL or file hash for a quick picture and one-click pivots.',ph:'IP, domain, URL or hash (defanged is fine)',ex:['8.8.8.8','example.com','hxxps://example[.]com/login','44d88612fea8a8f36de82e1278abb02f'],
-  help:'<b>How to use it:</b> phishing link? paste the URL. Suspicious file? paste its <b>hash</b> (search by hash first, do not upload private files). Found an odd IP in logs? paste it. You get free data (Shodan InternetDB, urlscan.io history, known-file database) plus buttons to open VirusTotal, urlscan, ANY.RUN and more. The indicator is sent to those third-party services.',
-  async run(v){const x=refang(v.trim());let t,host=x;
-   if(ipn(x))t='ip';else if(HASH.test(x))t='hash';else if(/^https?:\/\//i.test(x)){try{host=new URL(x).hostname}catch{throw new Error('Invalid URL')}t=ipn(host)?'ip':'domain'}
-   else if(/^[a-z0-9.-]+\.[a-z0-9-]{2,}$/i.test(x)){t='domain';host=x.toLowerCase()}else throw new Error('Enter an IP, domain, URL or file hash');
-   const e=encodeURIComponent,isUrl=/^https?:\/\//i.test(x);let body='',links=[];
-   if(t==='ip'||t==='domain'){const q=t==='ip'?x:host;
-    if(t==='ip'){const[d,i]=await Promise.all([api('intel',{q,t:'ip'}).catch(e=>({error:e.message})),api('ipinfo',{q}).catch(()=>null)]);
-     body+=card('Exposure (Shodan InternetDB)',d.error?`<span class="bad">${esc(d.error)}</span>`:d.found?kv({open_ports:d.ports,hostnames:d.hostnames,tags:d.tags,software:d.cpes,known_vulns:(d.vulns||[]).slice(0,25)}):'<span class="mut">Shodan has no record of this IP.</span>');
-     if(i&&!i.error)body+=card('IP reputation signals',`<p>${yn('VPN',i.vpn)} ${yn('Proxy',i.proxy)} ${yn('Tor',i.tor)} ${yn('Datacenter',i.datacenter)} ${yn('Abuse',i.abuser)}</p>`+kv({asn:i.asn,org:i.org,country:i.country,network_type:i.network_type}))}
-    else{const d=await api('intel',{q,t:'domain'}).catch(e=>({error:e.message}));
-     body+=card('urlscan.io history',d.error?`<span class="bad">${esc(d.error)}</span>`:d.scans.length?`<p class="mut">${d.total} public scans found, showing ${d.scans.length}.</p><table>${d.scans.map(s=>`<tr><td class="mut">${esc((s.time||'').slice(0,10))}</td><td>${esc(cut(s.url||'',50))}</td><td>${esc(s.ip||'')}</td><td>${esc(s.country||'')}</td><td>${/^[0-9a-f-]{36}$/.test(s.id||'')?lnks([['Report','https://urlscan.io/result/'+s.id+'/']]):''}</td></tr>`).join('')}</table>`:'<span class="mut">No public scans found.</span>')}
-    links=t==='ip'?[['VirusTotal','https://www.virustotal.com/gui/ip-address/'+e(q)],['Shodan','https://www.shodan.io/host/'+e(q)],['AbuseIPDB','https://www.abuseipdb.com/check/'+e(q)],['urlscan','https://urlscan.io/ip/'+e(q)],['GreyNoise','https://viz.greynoise.io/ip/'+e(q)]]
-     :[['VirusTotal','https://www.virustotal.com/gui/domain/'+e(q)],['urlscan','https://urlscan.io/domain/'+e(q)],['crt.sh','https://crt.sh/?q='+e(q)],['Shodan','https://www.shodan.io/search?query=hostname%3A'+e(q)],['ANY.RUN (submit URL)','https://app.any.run/']]}
-   else{const d=await api('intel',{q:x,t:'hash'}).catch(e=>({error:e.message}));
-    body+=card('Known-file database (CIRCL hashlookup)',d.error?`<span class="bad">${esc(d.error)}</span>`:d.found?'<b class="ok">Known file</b>'+kv({name:d.name,size:d.size,trust:d.trust,source:d.source}):'<span class="mut">Not in the known-good database. That does not mean it is malicious: check VirusTotal below.</span>');
+ inv:{cat:'sec',i:'🔎',label:'Investigate',title:'Investigate an indicator',sub:'Paste an IP, domain, URL or file hash for a quick picture, a triage report and one-click pivots.',ph:'IP, domain, URL or hash (defanged is fine)',ex:['8.8.8.8','example.com','hxxps://example[.]com/login','44d88612fea8a8f36de82e1278abb02f'],
+  help:'<b>How to use it:</b> phishing link? paste the URL. Suspicious file? paste its <b>hash</b> (search by hash first, never upload private files). Odd IP in your logs? paste it. You get free data plus buttons to open VirusTotal, urlscan, ANY.RUN and more. At the bottom is a <b>triage report</b> you can copy or download, and you can save the indicator to your <b>watchlist</b>. IPs use <b>Shodan InternetDB</b>, domains use <b>urlscan.io</b>, hashes use <b>VirusTotal</b> and a known-file database.',
+  async run(v){const x=refang(v.trim()),c=ioctype(x);if(!c)throw new Error('Enter an IP, domain, URL or file hash');
+   const{t,host}=c,e=encodeURIComponent,tn={ip:'IP address',domain:c.url?'URL (host '+defang(host)+')':'Domain',hash:'File hash'}[t];
+   const R=['# Triage report','',`- Indicator: \`${defang(x)}\``,`- Type: ${tn}`,`- Generated: ${new Date().toISOString().slice(0,19)} UTC`,'','## Findings'],S=[];let body='',links;
+   if(t==='ip'){const[d,i]=await Promise.all([api('intel',{q:x,t:'ip'}).catch(er=>({error:er.message})),api('ipinfo',{q:x}).catch(()=>null)]);
+    body+=card('Exposure (Shodan InternetDB)',d.error?`<span class="bad">${esc(d.error)}</span>`:d.found?kv({open_ports:d.ports,hostnames:d.hostnames,tags:d.tags,software:d.cpes,known_vulns:(d.vulns||[]).slice(0,25)}):'<span class="mut">Shodan has no record of this IP.</span>');
+    if(i&&!i.error)body+=card('IP reputation signals (ipapi.is)',`<p>${yn('VPN',i.vpn)} ${yn('Proxy',i.proxy)} ${yn('Tor',i.tor)} ${yn('Datacenter',i.datacenter)} ${yn('Abuse',i.abuser)}</p>`+kv({asn:i.asn,org:i.org,country:i.country,network_type:i.network_type}));
+    R.push(d.error?'- Shodan InternetDB: unavailable':d.found?`- Shodan InternetDB: open ports ${(d.ports||[]).join(', ')||'none'}; known vulns ${(d.vulns||[]).length?d.vulns.slice(0,10).join(', '):'none'}`:'- Shodan InternetDB: no record of this IP');
+    if(i&&!i.error)R.push(`- IP signals (ipapi.is): ${[i.vpn&&'VPN',i.proxy&&'proxy',i.tor&&'Tor',i.datacenter&&'datacenter',i.abuser&&'abuse reports'].filter(Boolean).join(', ')||'no risk flags'}; ${i.asn||''} ${i.org||''} ${i.country||''}`.trim());
+    S.push('Shodan InternetDB','ipapi.is');
+    links=[['VirusTotal','https://www.virustotal.com/gui/ip-address/'+e(x)],['Shodan','https://www.shodan.io/host/'+e(x)],['AbuseIPDB','https://www.abuseipdb.com/check/'+e(x)],['urlscan','https://urlscan.io/ip/'+e(x)],['GreyNoise','https://viz.greynoise.io/ip/'+e(x)]]}
+   else if(t==='domain'){const d=await api('intel',{q:host,t:'domain'}).catch(er=>({error:er.message}));
+    body+=card('urlscan.io history',d.error?`<span class="bad">${esc(d.error)}</span>`:d.scans.length?`<p class="mut">${d.total} public scans found, showing ${d.scans.length}.</p><table>${d.scans.map(s=>`<tr><td class="mut">${esc((s.time||'').slice(0,10))}</td><td>${esc(cut(s.url||'',50))}</td><td>${esc(s.ip||'')}</td><td>${esc(s.country||'')}</td><td>${/^[0-9a-f-]{36}$/.test(s.id||'')?lnks([['Report','https://urlscan.io/result/'+s.id+'/']]):''}</td></tr>`).join('')}</table>`:'<span class="mut">No public scans found.</span>');
+    R.push(d.error?'- urlscan.io: unavailable':d.scans.length?`- urlscan.io: ${d.total} public scans; most recent ${(d.scans[0].time||'').slice(0,10)} for ${defang(d.scans[0].url||'')}`:'- urlscan.io: no public scans');S.push('urlscan.io');
+    links=[['VirusTotal','https://www.virustotal.com/gui/domain/'+e(host)],['urlscan','https://urlscan.io/domain/'+e(host)],['crt.sh','https://crt.sh/?q='+e(host)],['Shodan','https://www.shodan.io/search?query=hostname%3A'+e(host)],['ANY.RUN (submit URL)','https://app.any.run/']]}
+   else{const[d,vt]=await Promise.all([api('intel',{q:x,t:'hash'}).catch(er=>({error:er.message})),api('vt',{q:x}).catch(er=>({error:er.message}))]);
+    const vtc=vt.error?(/not set up/i.test(vt.error)?'<span class="mut">VirusTotal is not connected yet. Add the VT_API_KEY secret (see README).</span>':`<span class="bad">${esc(vt.error)}</span>`):!vt.found?'<span class="mut">VirusTotal has never seen this file.</span>':`<div class="score ${vt.malicious>3?'bad':vt.malicious>0?'warn':'ok'}">${vt.malicious}<small>/${vt.total} engines say malicious</small></div>`+kv({suspicious:vt.suspicious,name:vt.name,file_type:vt.type,size:vt.size,threat_label:vt.threat_label,first_seen:vt.first_seen,last_analysis:vt.last_analysis,tags:vt.tags});
+    body+=card('VirusTotal',vtc)+card('Known-file database (CIRCL hashlookup)',d.error?`<span class="bad">${esc(d.error)}</span>`:d.found?'<b class="ok">Known file</b>'+kv({name:d.name,size:d.size,trust:d.trust,source:d.source}):'<span class="mut">Not in the known-good database. That does not mean it is malicious.</span>');
+    R.push(vt.error?'- VirusTotal: not available ('+vt.error+')':!vt.found?'- VirusTotal: has never seen this file':`- VirusTotal: ${vt.malicious}/${vt.total} engines flag it malicious (${vt.suspicious} suspicious)${vt.threat_label?'; label '+vt.threat_label:''}; first seen ${vt.first_seen||'n/a'}`,
+     d.error?'- Known-file database: unavailable':d.found?`- Known-file database: known file ${d.name||''} (${d.source||'CIRCL'})`:'- Known-file database: not listed (this does not mean malicious)');S.push('VirusTotal','CIRCL hashlookup');
     links=[['VirusTotal','https://www.virustotal.com/gui/file/'+e(x)],['MalwareBazaar','https://bazaar.abuse.ch/browse.php?search='+e(x)],['ANY.RUN','https://app.any.run/submissions/#filehash:'+e(x)]]}
-   return card('Indicator',kv({type:t==='hash'?'File hash':isUrl?'URL (host: '+host+')':t==='ip'?'IP address':'Domain',defanged:defang(x)}))+body+card('Open in other tools',lnks(links))}},
+   R.push('','## Suggested next steps',...NEXT[t].map(s=>'- '+s),'','## Analyst notes','','(add your notes here)','','## Sources',...S.map(s=>'- '+s));
+   REP=R.join('\n');REPN=x.replace(/[^a-z0-9.-]+/gi,'_').slice(0,40);
+   return card('Indicator',kv({type:tn,defanged:defang(x)})+`<p><button data-w="add" data-v="${esc(x)}">☆ Add to watchlist</button></p>`)+body+card('Open in other tools',lnks(links))
+    +card('Triage report',`<div class="cfg" id="rep">${esc(REP)}</div><button id="rc">Copy report</button> <button id="rd">Download .md</button>`)}},
+ watch:{cat:'sec',i:'⭐',label:'Watchlist',title:'Watchlist',sub:'Keep a list of indicators you are tracking. Saved only in this browser.',
+  help:'Save suspicious IPs, domains, URLs and hashes here, then re-check any of them with one click. The list is stored <b>in this browser only</b> (local storage): it is not uploaded, and it disappears if you clear your browser data. Use <b>Export CSV</b> to keep a backup. Indicators are shown defanged so you cannot click them by accident.',
+  run:()=>`<div class="card"><label>Add indicators (one per line, defanged is fine)<textarea id="w1" rows="3"></textarea></label><div class="acts" style="justify-content:flex-start;margin-top:12px"><button id="w2" style="background:var(--ac);color:#fff;border-color:var(--ac)">Add to watchlist</button></div></div><div id="wl"></div>`,
+  after(){$('#w2').onclick=()=>{$('#w1').value.split('\n').forEach(l=>wl.add(l));$('#w1').value='';drawWatch()};drawWatch()}},
  mail:{cat:'sec',i:'✉️',label:'Email Security',title:'Email security check',sub:'SPF, DKIM and DMARC: can someone spoof this domain?',ph:'example.com (optional DKIM selector: example.com selector1)',ex:['google.com','github.com'],
   help:'These three DNS records stop others from sending fake email as your domain. <b>SPF</b> lists allowed mail servers, <b>DMARC</b> says what to do with fakes (<b>reject</b> is strongest, <b>none</b> only monitors), and <b>DKIM</b> signs messages. DKIM needs a <b>selector</b> name (find it in an email header, e.g. selector1 or google).',
   async run(v){const[q,sel]=v.trim().split(/\s+/),d=await api('mailsec',sel?{q,sel}:{q});
@@ -417,14 +471,14 @@ async function go(){out.innerHTML='<div class="card mut"><span class="sp"></span
  try{out.innerHTML=await T[cur].run(q.value.trim());T[cur].after?.()}catch(e){out.innerHTML=card('Error',`<b class="bad">${esc(e.message)}</b>`)}}
 function pick(id){if(!T[id])id='ip';cur=id;const t=T[id];
  $('#cats').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.c===t.cat));nav.innerHTML='';Object.entries(T).filter(([,x])=>x.cat===t.cat).forEach(([k,x])=>{const b=document.createElement('button');b.textContent=x.i+' '+x.label;b.dataset.id=k;b.classList.toggle('on',k===id);b.onclick=()=>pick(k);nav.append(b)});
- $('#ttl').textContent=t.title;$('#sub').textContent=t.sub;$('#help').innerHTML='💡 '+t.help;
+ $('#ttl').textContent=t.title;$('#sub').textContent=t.sub;$('#help').innerHTML='💡 '+t.help+srcLine(id);$('#catd').textContent=CATS[t.cat][2];
  f.hidden=!t.ph;$('#ex').hidden=!t.ex;q.placeholder=t.ph||'';q.value='';out.innerHTML='';
  $('#ex').innerHTML=t.ex?'Try:'+t.ex.map(x=>`<button class="chip" data-v="${esc(x)}">${esc(x)}</button>`).join(''):'';
  history.replaceState(null,'','#'+id);if(!t.ph)go()}
 Object.entries(CATS).forEach(([c,[ic,n]])=>{const b=document.createElement('button');b.innerHTML=`<span>${ic}</span>${n}`;b.dataset.c=c;b.onclick=()=>pick(Object.keys(T).find(k=>T[k].cat===c));$('#cats').append(b)});
 f.onsubmit=e=>{e.preventDefault();if(q.value.trim()||T[cur].opt)go()};
 $('#ex').onclick=e=>{const b=e.target.closest('.chip');if(b){q.value=b.dataset.v;go()}};
-out.onclick=e=>{const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(b&&b.id==='cpg'){try{navigator.clipboard.writeText($('#cfgout').textContent);b.textContent='Copied ✓'}catch{}return}if(!b||!ip)return;
+out.onclick=e=>{const w=e.target.closest('[data-w]');if(w)return wAct(w);const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(b&&b.id==='cpg'){try{navigator.clipboard.writeText($('#cfgout').textContent);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rc'){try{navigator.clipboard.writeText(REP);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rd')return save('triage-'+REPN+'.md',REP,'text/markdown');if(!b||!ip)return;
  if(b.id==='cp'){try{navigator.clipboard.writeText(ip.textContent);b.textContent='Copied ✓'}catch{}}
  if(b.id==='hd'){ip.classList.toggle('blur');b.textContent=ip.classList.contains('blur')?'Show IP':'Hide IP'}};
 function theme(t){try{localStorage.setItem('th',t)}catch{}
@@ -432,5 +486,6 @@ function theme(t){try{localStorage.setItem('th',t)}catch{}
  document.querySelectorAll('#th button').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
 $('#th').onclick=e=>{const b=e.target.closest('button');if(b)theme(b.dataset.t)};
 let saved='auto';try{saved=localStorage.getItem('th')||'auto'}catch{}
+$('#srclist').innerHTML='<table>'+Object.entries(T).map(([id,t])=>`<tr><td style="white-space:nowrap">${t.i} ${esc(t.label)}</td><td class="mut">${LOCAL.includes(id)?'🔒 Browser only':esc(SRC[id]||'')}</td></tr>`).join('')+'</table>';
 theme(saved);pick(location.hash.slice(1));
 </script></body></html>
