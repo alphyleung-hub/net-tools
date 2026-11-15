@@ -3,7 +3,7 @@
 # 🌐 Net Tools
 
 **A free, open-source network and security toolbox that runs on Cloudflare's free plan.**
-IP lookup · DNS · domain mapping · BGP · subnet calculators · threat-intel triage — 35 tools in one simple page.
+IP lookup · DNS · domain mapping · BGP · subnet calculators · threat-intel triage — 42 tools in one simple page.
 
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
 ![No build step](https://img.shields.io/badge/build-none-brightgreen)
@@ -29,7 +29,7 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 
 ## ✨ Features
 
-35 tools in five categories. 🔒 = runs entirely in your browser (nothing is sent anywhere).
+42 tools in seven categories. 🔒 = runs entirely in your browser (nothing is sent anywhere).
 
 ### 🏠 Connection
 | Tool | What it does | Data from |
@@ -60,11 +60,27 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 | **ASN Prefixes** | Every IPv4 / IPv6 prefix a network announces | RIPEstat |
 | **BGP Route** | Route visibility, origin AS and sample AS paths | RIPEstat (RIS collectors) |
 
+### ✉️ Email
+| Tool | What it does | Data from |
+|---|---|---|
+| **Email Health** | One report with a grade: MX, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, BIMI, DNSSEC, reverse DNS and blocklists, with fixes | Cloudflare DNS, public blocklists |
+| **MX Lookup** | Mail servers, IPv4/IPv6, reverse DNS, provider detection | Cloudflare DNS |
+| **DMARC Check** | Policy, every tag explained, report authorisation and how to strengthen it | Cloudflare DNS |
+| **SPF/DKIM** | Quick SPF, DKIM and DMARC check | Cloudflare DNS |
+| **Header Analyzer** 🔒 | Route, delays, TLS and SPF/DKIM/DMARC results of a pasted email header | browser |
+
+### ☁️ Cloud
+| Tool | What it does | Data from |
+|---|---|---|
+| **Cloud Health** | Status board for Microsoft 365, Azure, AWS, Google Cloud, Cloudflare, GitHub and Claude with clickable core-service tiles | provider RSS / Atom feeds and Statuspage APIs |
+
 ### 🛡️ Security
 | Tool | What it does | Data from |
 |---|---|---|
 | **Investigate** | Paste an IP, domain, URL or hash. Get findings, pivot links and a **triage report** (copy / download) | Shodan InternetDB (IPs), urlscan.io (domains), CIRCL + VirusTotal (hashes) |
 | **VirusTotal** | Domain, IP or hash: detections, categories, DNS, certificate, WHOIS (needs `VT_API_KEY`) | VirusTotal API |
+| **NVD Dashboard** | New CVEs by severity, CISA KEV count, newest critical CVEs, keyword search | NIST NVD API |
+| **Patch Check** 🔒 | Verify KBs, minimum versions or CVE fixes against pasted endpoint inventories | browser + NVD |
 | **Watchlist** ⭐🔒 | Save indicators in your browser, re-check with one click, export CSV | local storage |
 | **Email Security** | SPF, DKIM and DMARC with plain-language grades | Cloudflare DNS |
 | **Security Headers** | HSTS, CSP, X-Frame-Options and more, plus cookie flags | this site's Worker |
@@ -155,6 +171,10 @@ Investigate can show VirusTotal results for file hashes. Add your free API key a
 
 Open `/api/health` on your site to check: it should show `virustotal_key_found: true`. Without the secret, everything else still works. Free VirusTotal limits: 4 requests/minute, 500/day.
 
+### Optional: NVD API key
+
+NVD works without a key (5 requests per 30 seconds, results cached 15 minutes). A free key from nvd.nist.gov raises the limit and adds medium and low counts to the dashboard. Add it as a **Secret** named `NVD_API_KEY`, the same way as `VT_API_KEY`.
+
 ## 🔌 API
 
 All endpoints are `GET /api/<name>` and return JSON.
@@ -178,6 +198,11 @@ All endpoints are `GET /api/<name>` and return JSON.
 | `oui` | `q` (MAC) | MAC vendor |
 | `intel` | `q`, `t` (`ip`, `domain`, `hash`) | Shodan InternetDB / urlscan.io / CIRCL |
 | `vt` | `q` (hash) | VirusTotal file lookup (needs `VT_API_KEY`) |
+| `mx` | `q` | MX lookup with IPs and reverse DNS |
+| `mailhealth` | `q`, `sel` (DKIM selector, optional) | Full email health data |
+| `dmarc` | `q` | DMARC record analysis |
+| `cloud` | `p` (`m365`, `azure`, `aws`, `gcp`, `cloudflare`, `github`, `claude`) | Provider status |
+| `nvd` | `k` (keyword, optional) | NVD dashboard or search |
 | `vtx` | `q`, `t` (`domain`, `ip`, `hash`) | VirusTotal details (needs `VT_API_KEY`) |
 | `hdrs` | `url` | Raw response headers and redirect chain |
 | `health` | - | Shows whether optional features (VirusTotal key) are configured |

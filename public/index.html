@@ -69,6 +69,11 @@ select,.kv input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-r
 .srcs{max-width:960px;margin:0 auto 12px;text-align:left}.srcs summary{cursor:pointer;color:var(--ac);text-align:center}
 .srcs table{margin-top:8px;font-size:13px}.srcs p{margin:8px 0}
 .pill.mx{color:#3b82f6}
+.cats{flex-wrap:wrap}.cats button{flex:1 1 92px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}
+.tile{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:10px;text-decoration:none;font-size:13px;color:var(--fg);background:var(--card)}
+.tile i{width:10px;height:10px;border-radius:50%;background:var(--mut);flex:none}.tile.ok i{background:var(--ok)}.tile.warn i{background:var(--warn)}.tile.bad i{background:var(--bad)}.tile:hover{border-color:var(--ac)}
+.grade{font-size:56px;font-weight:800;line-height:1}
 form select{width:auto;flex:none;margin:0;padding:8px 10px}
 .hdrt{border:1px solid var(--bd)}.hdrt td{padding:11px 14px;border:1px solid var(--bd)}.hdrt td:first-child{background:var(--acs);width:34%;color:var(--fg);font-size:14px}
 .card h3.big{font-size:19px;text-transform:none;letter-spacing:0;color:var(--fg);word-break:break-all}
@@ -233,8 +238,8 @@ function normHost(s){s=refang(String(s).trim());if(!s||/^[0-9a-f.:]+\/\d{1,3}$/i
  if(sch||/[\/?#]/.test(s)){try{return new URL(sch?s:'http://'+s).hostname.replace(/^\[|\]$/g,'')}catch{}}
  if(/^[a-z0-9.-]+:\d{1,5}$/i.test(s))return s.replace(/:\d+$/,'').replace(/\.$/,'');
  return s.replace(/\.$/,'')}
-const HOSTN=new Set(['map','dns','whois','dnssec','ssl','ping','mtr','score','claude','bgp']),FIRSTN=new Set(['prop','mail']),
- RECT=new Set(['vt','map','dns','whois','prop','dnssec','ssl','ping','mtr','mail','score','claude','hdr','status','inv','bgp']),NOBAR=new Set(['watch','hist','pwn']);
+const HOSTN=new Set(['mx','dmarc','map','dns','whois','dnssec','ssl','ping','mtr','score','claude','bgp']),FIRSTN=new Set(['prop','mail','mhealth']),
+ RECT=new Set(['mhealth','mx','dmarc','vt','map','dns','whois','prop','dnssec','ssl','ping','mtr','mail','score','claude','hdr','status','inv','bgp']),NOBAR=new Set(['watch','hist','pwn']);
 const norm=(id,v)=>{v=v.trim();if(id==='vt')return HASH.test(v)?v:normHost(v);if(HOSTN.has(id))return normHost(v);if(FIRSTN.has(id)){const[a,...r]=v.split(/\s+/);return[normHost(a||''),...r].join(' ').trim()}return v};
 const ts2=d=>d.toLocaleString(undefined,{hour12:false})+' ('+d.toISOString().slice(0,19).replace('T',' ')+' UTC)';
 function sections(root){return[...root.children].flatMap(c=>c.classList.contains('grid2')?[...c.children]:[c]).filter(c=>c.classList.contains('card')).map(c=>{
@@ -255,14 +260,15 @@ function openTool(id,v){pick(id);q.value=v;go()}
 function wAct(b){const a=b.dataset.w,v=b.dataset.v,tool=b.dataset.tool||'inv';
  if(a==='add'){wl.add(v,tool);b.textContent='Saved ✓';b.disabled=true}
  else if(a==='run')openTool(tool,v);
+ else if(a==='refresh')go();
  else if(a==='del'){wl.del(v,tool);drawWatch()}
  else if(a==='clr'){if(confirm('Clear the whole watchlist?')){wl.set([]);drawWatch()}}
  else if(a==='csv')save('watchlist.csv','\ufeff'+csv([['Type','Item','Tool','Added (UTC)'],...wl.get().map(x=>[x.t,['ip','domain','url','hash'].includes(x.t)?defang(x.v):x.v,x.tool||'inv',new Date(x.ts).toISOString()])]),'text/csv');
  else if(a==='hcsv')save('nettools-history.csv','\ufeff'+csv([['Time (UTC)','Tool','Input'],...hist.get().map(x=>[x.t,T[x.tool]?.label||x.tool,x.input])]),'text/csv');
  else if(a==='hjson')save('nettools-history.json',JSON.stringify(hist.get().map(x=>({time_utc:x.t,tool:T[x.tool]?.label||x.tool,tool_id:x.tool,input:x.input})),null,2),'application/json');
  else if(a==='hclr'){if(confirm('Clear the history?')){hist.clear();go()}}}
-const LOCAL=['dec','ioc','hash','jwt','subnet','range','bw','gen','watch','hist'];
-const SRC={ip:'Cloudflare (your connection data, read by this site) and the Cloudflare trace endpoint',
+const LOCAL=['ehdr','dec','ioc','hash','jwt','subnet','range','bw','gen','watch','hist'];
+const SRC={mhealth:'Cloudflare DNS over HTTPS (MX, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, BIMI, reverse DNS), the domain MTA-STS policy file, and public DNS blocklists (Spamhaus, SpamCop, PSBL, UCEPROTECT)',mx:'Cloudflare DNS over HTTPS',dmarc:'Cloudflare DNS over HTTPS',cloud:'each provider public status feed: Microsoft 365 and Azure RSS, AWS Health RSS, Google Cloud Atom feed, and the Statuspage APIs of Cloudflare, GitHub and Claude (cached about a minute)',nvd:'NIST National Vulnerability Database API 2.0 (nvd.nist.gov), cached 15 minutes',patch:'calculated in your browser; CVE version ranges come from NIST NVD (only the CVE ID is sent)',ip:'Cloudflare (your connection data, read by this site) and the Cloudflare trace endpoint',
  claude:'ipapi.is for IP quality, Anthropic supported regions policy (list built in), and your browser for reachability, WebRTC and device info',
  score:'ipapi.is (IP type and risk flags)',split:'public IP-echo sites (ipify, icanhazip, ifconfig.me, ipwho.is, ipapi.co, ipinfo.io, ip.sb, Cloudflare, httpbin), called from your browser',
  webrtc:'your browser and a Google STUN server',map:'certificate logs (crt.sh, Certspotter as backup), Cloudflare DNS, ipapi.is',dns:'Cloudflare or Google DNS over HTTPS (you choose the resolver)',hdrs:'this site server requests the URL and shows the raw response headers, following redirects one step at a time',vt:'VirusTotal API (needs the VT_API_KEY secret)',links:'external websites (links only: nothing is sent until you open one)',
@@ -302,10 +308,95 @@ const VTMSG='The Worker cannot see a VirusTotal key. Open /api/health: it must s
 function askGemini(){const t=T[cur],txt=`I am using the "${t.label}" tool in a free online network and security toolbox. What it does: ${t.sub} ${t.help.replace(/<[^>]+>/g,'')}\n\nPlease explain in simple words: 1) what this tool is for and when to use it, 2) how to read its results (what is normal and what is a warning), 3) a short real-world example, and 4) its limits and common mistakes.`;
  const done=()=>{$('#gemn').textContent='Question copied. Paste it into Gemini (Ctrl+V).'},fail=()=>window.prompt('Copy this question and paste it into Gemini:',txt);
  window.open('https://gemini.google.com/app','_blank','noopener');try{navigator.clipboard.writeText(txt).then(done,fail)}catch{fail()}}
+const OKS={bad:['bad','Problem'],warn:['warn','Warning'],ok:['ok','Passed'],mut:['mut','Info']};
+function mailChecks(d){const G=[];const add=n=>{const g={name:n,items:[]};G.push(g);return(s,t,x)=>g.items.push({s,t,d:x||''})};
+ let a=add('Mail servers (MX)');const mx=d.mx;
+ if(mx.nxdomain)a('bad','Domain not found','This domain does not exist in DNS (NXDOMAIN).');
+ else if(mx.null_mx)a('mut','Null MX','The domain says it does not accept email (MX 0 ".").');
+ else if(!mx.hosts.length)a('bad','No MX records','Nobody can send email to this domain. Add MX records that point to your mail provider.');
+ else{a('ok',mx.hosts.length+' mail server'+(mx.hosts.length>1?'s':'')+' found',(mx.provider?'Provider: '+mx.provider+'. ':'')+mx.hosts.map(h=>h.pref+' '+h.host).join(', '));
+  if(mx.hosts.length<2)a('warn','Only one mail server','There is no backup. If it is down, mail waits and may bounce. Add a second MX if your provider offers one.');
+  mx.hosts.forEach(h=>{if(h.cname)a('bad',h.host+' is a CNAME','An MX must point to a name with an address record, not an alias (RFC 2181).');else if(!h.ips.length)a('bad',h.host+' has no IP address','This mail server name does not resolve, so mail sent to it fails.');
+   if(h.ptr&&h.ptr.length&&h.ptr.every(x=>!x.ptr.length))a('warn','No reverse DNS for '+h.ptr[0].ip,'Many receivers distrust servers without a PTR record.')})}
+ a=add('SPF (who may send mail)');const s=d.spf;
+ if(!s.found)a('bad','No SPF record','Add a TXT record that starts with v=spf1, lists your senders and ends with -all (or ~all).');
+ else{if(s.count>1)a('bad','More than one SPF record','Only one is allowed. Several records cause a PermError and SPF fails. Merge them into one.');
+  a('mut','Record',s.record);
+  const al={'-all':['ok','Strict policy (-all)','Mail from servers that are not listed is rejected.'],'~all':['warn','Soft fail (~all)','Unlisted senders are marked suspicious, not rejected. Use -all when you are sure of your senders.'],redirect:['ok','Uses redirect','The policy comes from another domain.']}[s.all]||['bad',s.all?'Weak policy ('+s.all+')':'No "all" mechanism','The record should end with -all or ~all.'];a(...al);
+  s.lookups>10?a('bad','Too many DNS lookups ('+s.lookups+')','SPF allows at most 10. Above that it gives a PermError. Remove unused includes.'):s.lookups>=8?a('warn','Close to the lookup limit ('+s.lookups+' of 10)','Adding another service may break SPF.'):a('ok','DNS lookups: '+s.lookups+' of 10','Within the limit.')}
+ a=add('DMARC (what to do with fake mail)');const m=d.dmarc;
+ if(!m.found)a('bad','No DMARC record','Add a TXT record at _dmarc.'+d.domain+', for example v=DMARC1; p=none; rua=mailto:you@'+d.domain+' to start monitoring.');
+ else{a('mut','Record',m.record+(m.inherited?'  (found at '+m.at_domain+')':''));const p=(m.tags.p||'').toLowerCase();
+  a(p==='reject'||p==='quarantine'?'ok':'warn','Policy: '+(p||'missing'),p==='reject'?'Fake mail is rejected. This is the strongest setting.':p==='quarantine'?'Fake mail goes to spam. Move to reject when you are confident.':'Monitoring only: fake mail is still delivered. Move to quarantine, then reject.');
+  if(m.tags.pct&&+m.tags.pct<100)a('warn','Only '+m.tags.pct+'% of mail is checked','Raise pct to 100 when ready.');
+  if(!m.rua.length)a('warn','No aggregate reports (rua)','Add rua=mailto:... to receive reports about who sends mail as you.');
+  (m.external||[]).forEach(x=>{if(!x.authorized)a('warn','Report address at '+x.domain+' is not authorised','That domain must publish '+(m.at_domain||d.domain)+'._report._dmarc.'+x.domain+' for reports to arrive.')})}
+ a=add('DKIM (signed mail)');
+ if(!d.dkim.length)a('warn','No DKIM key found on common selectors','Checked: default, selector1, selector2, google, k1, s1. Your provider may use another name: type it after the domain, for example '+d.domain+' mysel.');
+ else d.dkim.forEach(k=>{a('ok','Key found: selector '+k.selector,k.key_bits?k.key_bits+'-bit key':'');if(k.key_bits&&k.key_bits<2048)a('warn','Weak key ('+k.key_bits+' bits) on '+k.selector,'Use a 2048-bit key.')});
+ a=add('Transport security and extras');const t=d.mta_sts;
+ !t.found?a('warn','No MTA-STS','MTA-STS makes other servers use encrypted connections when they send to you. Recommended.'):!t.policy?a('bad','MTA-STS policy file missing','The TXT record exists but https://mta-sts.'+d.domain+'/.well-known/mta-sts.txt could not be read.'):a(t.policy.mode==='enforce'?'ok':'warn','MTA-STS mode: '+(t.policy.mode||'unknown'),t.policy.mode==='enforce'?'Encrypted delivery is required.':'Not enforcing yet. Switch to enforce after testing.');
+ a(d.tls_rpt?'ok':'mut',d.tls_rpt?'TLS-RPT present':'No TLS-RPT','TLS-RPT sends you reports about failed encrypted deliveries.');
+ a(d.bimi?'ok':'mut',d.bimi?'BIMI present':'No BIMI','BIMI shows your logo in some inboxes (optional).');
+ a(d.dnssec?'ok':'mut',d.dnssec?'DNSSEC enabled':'DNSSEC not enabled','DNSSEC protects DNS answers from tampering (recommended).');
+ a=add('Blocklists');
+ if(!d.blocklists.length)a('mut','No mail server IPs to check','');
+ d.blocklists.forEach(b=>{const L=b.lists.filter(x=>x.state==='listed'),U=b.lists.filter(x=>x.state==='unavailable');
+  L.length?a('bad',b.ip+' is listed on '+L.map(x=>x.name).join(', '),'Mail from this server may be blocked. Find the cause, fix it, then request removal.'):a('ok',b.ip+' is not listed',b.lists.filter(x=>x.state==='clear').length+' of '+b.lists.length+' blocklists answered');
+  if(U.length)a('mut','No answer from: '+U.map(x=>x.name).join(', '),'Some blocklists refuse queries from public DNS servers.')});
+ const all=G.flatMap(g=>g.items),c={bad:all.filter(x=>x.s==='bad').length,warn:all.filter(x=>x.s==='warn').length,ok:all.filter(x=>x.s==='ok').length},score=Math.max(0,100-15*c.bad-5*c.warn);
+ return{groups:G,counts:c,score,grade:score>=90?'A':score>=80?'B':score>=70?'C':score>=60?'D':'F'}}
+function parseMail(txt){const head=txt.replace(/\r/g,'').split(/\n\s*\n/)[0],lines=[];
+ head.split('\n').forEach(l=>{if(/^[ \t]/.test(l)&&lines.length)lines[lines.length-1]+=' '+l.trim();else if(l.trim())lines.push(l)});
+ const H=lines.map(l=>{const i=l.indexOf(':');return i>0?[l.slice(0,i).trim(),l.slice(i+1).trim()]:null}).filter(Boolean),get=n=>H.filter(x=>x[0].toLowerCase()===n.toLowerCase()).map(x=>x[1]),first=n=>get(n)[0]||'';
+ const hops=get('Received').reverse().map(r=>{const i=r.lastIndexOf(';'),t=i>0?Date.parse(r.slice(i+1).trim()):NaN,b=i>0?r.slice(0,i):r;
+  return{from:/from\s+(\S+)/i.exec(b)?.[1],by:/by\s+(\S+)/i.exec(b)?.[1],ip:/\[(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{3,})\]/i.exec(b)?.[1]||/\((?:[^)]*\s)?(\d{1,3}(?:\.\d{1,3}){3})\)/.exec(b)?.[1],with:/with\s+(\S+)/i.exec(b)?.[1],tls:/ESMTPS|TLS|with\s+HTTPS/i.test(b),t:isNaN(t)?null:t}});
+ hops.forEach((x,i)=>{x.delay=i&&x.t!=null&&hops[i-1].t!=null?Math.round((x.t-hops[i-1].t)/1000):null});
+ const ar=get('Authentication-Results').join(' ; '),res=k=>{const m=new RegExp('\\b'+k+'=(\\w+)','i').exec(ar);return m?m[1].toLowerCase():k==='spf'?((/^(\w+)/.exec(first('Received-SPF'))||[])[1]||'').toLowerCase():''};
+ const ts=hops.map(x=>x.t).filter(x=>x!=null);
+ return{H,hops,spf:res('spf'),dkim:res('dkim'),dmarc:res('dmarc'),sigs:get('DKIM-Signature').map(x=>({d:(/\bd=([^;\s]+)/.exec(x)||[])[1],s:(/\bs=([^;\s]+)/.exec(x)||[])[1],a:(/\ba=([^;\s]+)/.exec(x)||[])[1]})),
+  from:first('From'),to:first('To'),subject:first('Subject'),date:first('Date'),msgid:first('Message-ID'),returnPath:first('Return-Path'),replyTo:first('Reply-To'),
+  total:ts.length>1?Math.round((Math.max(...ts)-Math.min(...ts))/1000):null,spam:H.filter(x=>/^X-(Spam|MS-Exchange-Organization-SCL|Microsoft-Antispam|Forefront)/i.test(x[0])).map(x=>[x[0],cut(x[1],120)]),hasAuth:!!ar}}
+function mailFindings(r){const F=[],dm=s=>{const m=/@([\w.-]+)/.exec(s||'');return m?m[1].toLowerCase():''},fd=dm(r.from),rp=dm(r.returnPath),rt=dm(r.replyTo),md=dm(r.msgid);
+ const R=(k,v)=>v?F.push([v==='pass'?'ok':/fail|hardfail|permerror/.test(v)?'bad':'warn',k+': '+v]):F.push(['mut',k+': no result in the headers']);
+ R('SPF',r.spf);R('DKIM',r.dkim);R('DMARC',r.dmarc);
+ if(fd&&rp&&fd!==rp&&!rp.endsWith('.'+fd)&&!fd.endsWith('.'+rp))F.push(['warn','From domain ('+fd+') differs from Return-Path domain ('+rp+'). SPF may not align with the visible sender.']);
+ if(r.sigs.length&&fd&&!r.sigs.some(x=>x.d&&(x.d===fd||fd.endsWith('.'+x.d)||x.d.endsWith('.'+fd))))F.push(['warn','No DKIM signature matches the From domain ('+fd+'). Signed by: '+r.sigs.map(x=>x.d).join(', ')]);
+ if(fd&&rt&&fd!==rt)F.push(['warn','Reply-To domain ('+rt+') differs from the From domain. Replies would go somewhere else (common in phishing).']);
+ if(fd&&md&&fd!==md&&!md.endsWith('.'+fd))F.push(['mut','Message-ID domain ('+md+') differs from the From domain (normal for mail sent through a service).']);
+ if(r.total!=null)F.push([r.total>600?'warn':'ok','Total delivery time: '+dur(r.total)]);
+ const slow=r.hops.filter(x=>x.delay>120);if(slow.length)F.push(['warn',slow.length+' slow hop'+(slow.length>1?'s':'')+' (over 2 minutes): look at the Delay column.']);
+ const nt=r.hops.filter(x=>!x.tls&&x.with&&/SMTP/i.test(x.with)&&!/ESMTPS/i.test(x.with));if(nt.length)F.push(['warn',nt.length+' hop'+(nt.length>1?'s':'')+' may not be encrypted (plain SMTP).']);
+ return F}
+function vnorm(v){return String(v).split(/[^0-9]+/).filter(Boolean).slice(0,6).map(Number)}
+function vcmp(a,b){const x=vnorm(a),y=vnorm(b);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d<0?-1:1}return 0}
+function parseSw(l){l=l.trim();let m;
+ if(m=/^ii\s+(\S+)\s+(\S+)/.exec(l))return{name:m[1].replace(/:\w+$/,''),ver:m[2].replace(/^\d+:/,'')};
+ if(m=/^([A-Za-z][\w.+]*(?:-[A-Za-z][\w.+]*)*)-(\d[\w.+~]*)-[\w.+~]+$/.exec(l))return{name:m[1],ver:m[2]};
+ if(m=/^(\S.*?)[\s=:,]+v?(\d+(?:\.\d+)+[\w.+~-]*)\s*$/.exec(l))return{name:m[1].trim(),ver:m[2]};return null}
+function parseInv(text){const B=[];let c=null;text.replace(/\r/g,'').split('\n').forEach(l=>{if(/^\s*#/.test(l)){c={name:l.replace(/^\s*#\s*/,'').trim()||'Endpoint '+(B.length+1),kb:new Set(),sw:[]};B.push(c);return}
+ if(!l.trim())return;if(!c){c={name:'Endpoint 1',kb:new Set(),sw:[]};B.push(c)}
+ const k=l.match(/KB\d{6,8}/gi);if(k){k.forEach(x=>c.kb.add(x.toUpperCase()));return}const s=parseSw(l);if(s)c.sw.push(s)});return B}
+function evalRule(r,ep){
+ if(r.type==='kb')return ep.kb.has(r.id)?{s:'ok',t:'Installed'}:!ep.kb.size&&ep.sw.length?{s:'mut',t:'No Windows updates listed'}:{s:'bad',t:'Missing'};
+ if(r.type==='ver'){const f=ep.sw.filter(x=>x.name.toLowerCase().includes(r.name.toLowerCase()));if(!f.length)return{s:'mut',t:'Not installed'};const o=f.filter(x=>vcmp(x.ver,r.min)<0);return o.length?{s:'bad',t:'Outdated: '+o[0].ver+' (need '+r.min+' or newer)'}:{s:'ok',t:'OK: '+f[0].ver}}
+ if(r.type==='cve'){let found=false;const nn=x=>x.toLowerCase().replace(/[-_ ]/g,'');
+  for(const g of r.ranges){const bounded=g.version||g.end_excl||g.end_incl||g.start;for(const x of ep.sw.filter(x=>nn(x.name).includes(nn(g.product)))){found=true;
+   const inR=bounded&&(g.version?vcmp(x.ver,g.version)===0:true)&&(g.start?vcmp(x.ver,g.start)>=0:true)&&(g.end_excl?vcmp(x.ver,g.end_excl)<0:true)&&(g.end_incl?vcmp(x.ver,g.end_incl)<=0:true);
+   if(inR)return{s:'bad',t:'Vulnerable: '+x.name+' '+x.ver+(g.end_excl?' (fixed in '+g.end_excl+')':'')}}}
+  return found?{s:'ok',t:'Not in the affected range'}:{s:'mut',t:r.ranges.length?'Affected software not found':'No version data in NVD'}}
+ return{s:'mut',t:'?'}}
+const safeHref=u=>/^https?:\/\//i.test(u||'')?u:'#';
+const fmtD=s=>{const d=new Date(s);return isNaN(d)?'':d.toLocaleString(undefined,{hour12:false})};
+const CLN={m365:['Microsoft 365','🟦'],azure:['Microsoft Azure','🔷'],aws:['Amazon Web Services','🟧'],gcp:['Google Cloud','🔵'],cloudflare:['Cloudflare','🟠'],github:['GitHub','⚫'],claude:['Claude (Anthropic)','🟤']};
+const CS={ok:['ok','Operational'],degraded:['warn','Degraded'],outage:['bad','Outage'],unknown:['mut','Unknown']};
+const DM={v:'Version: always DMARC1',p:'What to do with mail that fails: none = only monitor, quarantine = send to spam, reject = block it',sp:'Policy for subdomains (uses p when missing)',pct:'Percent of mail the policy applies to',rua:'Where daily summary (aggregate) reports are sent',ruf:'Where detailed failure reports are sent',adkim:'DKIM alignment: r = relaxed, s = strict',aspf:'SPF alignment: r = relaxed, s = strict',fo:'When to create failure reports',ri:'Seconds between reports',rf:'Failure report format'};
 const CATS={me:['🏠','Connection','See your IP address, location and how websites and Claude see your connection.'],
  dom:['🌍','Domain & DNS','Look up the records, certificates, owner and hidden sub-sites of any domain.'],
  net:['📡','Network','Test speed and routes, check website status and explore networks and BGP routing.'],
- sec:['🛡️','Security','Investigate suspicious indicators, check email and web security, and decode data safely.'],
+ mail:['✉️','Email','Check mail servers, SPF, DKIM, DMARC, blocklists and read email headers.'],
+ cloud:['☁️','Cloud','Live health of Microsoft 365, Azure, AWS, Google Cloud and more.'],
+ sec:['🛡️','Security','Investigate suspicious indicators, track vulnerabilities and verify patches, and decode data safely.'],
  tool:['🧮','Tools','Calculators and generators: subnets, CIDR ranges, transfer time, MAC vendors and configs.']};
 
 const T={
@@ -514,6 +605,21 @@ ${L('VirtualBytes tools','https://tools.virtualbytes.io/','A collection of onlin
 ${L('DNSChecker','https://dnschecker.org/','DNS records and global DNS propagation checks.')}
 ${L('VirusTotal','https://www.virustotal.com/','Scan files, domains, IPs and URLs with about 70 security engines.')}</div>`},
   after(){const u=()=>{const h=encodeURIComponent(normHost($('#lk').value));document.querySelectorAll('[data-ch]').forEach(a=>{a.href='https://check-host.net/'+a.dataset.ch+(h?'?host='+h:'')})};$('#lk').oninput=u}},
+ cloud:{cat:'cloud',i:'☁️',label:'Cloud Health',title:'Cloud service health',sub:'Live status of Microsoft 365, Azure, AWS, Google Cloud, Cloudflare, GitHub and Claude, with core services you can click.',
+  help:'A one-page view for cloud engineers, like a status board. Each provider shows an overall <b>status</b>, its <b>core services</b> as tiles (<b style="color:var(--ok)">green</b> = no incident, <b style="color:var(--warn)">yellow</b> = degraded, <b style="color:var(--bad)">red</b> = outage) and any <b>active incidents</b>. <b>Click a tile</b> or a title to open the provider own status page. Data comes from each provider public <b>RSS / Atom status feed</b> (or its Statuspage API for Cloudflare, GitHub and Claude), refreshed about once a minute. Feeds describe incidents in free text, so tiles are matched by keyword: always confirm on the official page.',
+  async run(){const R=await Promise.all(Object.keys(CLN).map(id=>api('cloud',{p:id}).catch(()=>({id,page:'',feed:'',status:'unknown',error:'Could not load this provider',active:[],recent:[],tiles:[]})))),
+   lnk=(u,t)=>u?`<a href="${esc(safeHref(u))}" target="_blank" rel="noopener noreferrer">${t} ↗</a>`:'',issues=R.filter(r=>r.status==='outage'||r.status==='degraded').length;
+   const head=card('Overview',(issues?`<b class="warn" style="font-size:18px">${issues} of ${R.length} providers report issues</b>`:R.every(r=>r.status==='ok')?'<b class="ok" style="font-size:18px">All monitored services are operating normally</b>':'<b style="font-size:18px">Some providers could not be checked</b>')
+    +`<p>${R.map(r=>`<button data-sc="cl-${r.id}">${CLN[r.id][1]} ${esc(CLN[r.id][0])} ${pill(CS[r.status][0],CS[r.status][1])}</button>`).join(' ')}</p>`
+    +`<table><tr class="mut"><td>Provider</td><td>Status</td><td>Active incidents</td><td>Status page</td></tr>${R.map(r=>`<tr><td>${esc(CLN[r.id][0])}</td><td>${esc(CS[r.status][1])}</td><td>${r.active.length}</td><td>${lnk(r.page,'open')}</td></tr>`).join('')}</table>`
+    +`<p class="mut">Checked ${esc(fmtD(new Date()))}. <button data-w="refresh">↻ Refresh</button></p>`);
+   const sev=a=>a.severity==='major'?pill('bad','Major'):a.severity==='info'?pill('mut','Info'):pill('warn','Minor');
+   const trs=L=>L.map(a=>`<tr><td>${sev(a)}</td><td><a href="${esc(safeHref(a.link))}" target="_blank" rel="noopener noreferrer">${esc(cut(a.title,110))}</a>${a.resolved?' '+pill('ok','resolved'):''}<br><span class="mut">${esc(cut(a.summary||'',200))}</span></td><td class="mut" style="white-space:nowrap">${esc(fmtD(a.date))}</td></tr>`).join('');
+   return head+R.map(r=>{const c=CS[r.status]||CS.unknown;return `<div class="card" id="cl-${r.id}"><h3 class="big">${CLN[r.id][1]} ${esc(CLN[r.id][0])} ${pill(c[0],c[1])}</h3>`
+    +`<p class="mut">${esc(r.error||r.summary||'')}${r.maintenance?' · '+r.maintenance+' scheduled maintenance':''} · ${lnk(r.page,'Status page')} ${lnk(r.feed,'Feed')}</p>`
+    +(r.tiles.length?`<div class="tiles">${r.tiles.map(t=>`<a class="tile ${t.status}" href="${esc(safeHref(t.link))}" target="_blank" rel="noopener noreferrer" title="${esc(t.detail||'')}"><i></i>${esc(t.name)}</a>`).join('')}</div>`:'')
+    +(r.active.length?`<table>${trs(r.active)}</table>`:r.status==='unknown'?'':'<p class="ok">No active incidents reported.</p>')
+    +(r.recent.length?`<details><summary class="mut" style="cursor:pointer">Last 7 days (${r.recent.length})</summary><table>${trs(r.recent)}</table></details>`:'')+'</div>'}).join('')}},
  hist:{cat:'tool',i:'🕘',label:'History',title:'Check history',sub:'Every check you ran, with its time. Saved only in this browser.',
   help:'Each time you run a check, the tool, what you typed and the time are logged here (last 200). Click <b>Check again</b> to repeat one, or export the whole log as <b>CSV</b> or <b>JSON</b>. The log stays <b>in this browser only</b> and disappears if you clear your browser data. Every result also has its own <b>⬇ JSON</b> and <b>⬇ CSV</b> buttons.',
   run:()=>{const a=hist.get();return card('Checks ('+a.length+')',a.length?`<table><tr class="mut"><td>Time</td><td>Tool</td><td>Input</td><td></td></tr>${a.slice(0,100).map(x=>`<tr><td class="mut" style="white-space:nowrap">${esc(new Date(x.t).toLocaleString(undefined,{hour12:false}))}</td><td>${esc((T[x.tool]?.i||'')+' '+(T[x.tool]?.label||x.tool))}</td><td>${esc(cut(x.input,50))}</td><td><button data-w="run" data-tool="${esc(x.tool)}" data-v="${esc(x.input)}">Check again</button></td></tr>`).join('')}</table><p><button data-w="hcsv">Export CSV</button> <button data-w="hjson">Export JSON</button> <button data-w="hclr">Clear history</button></p>`:'<span class="mut">No checks yet. Run any tool and it will appear here.</span>')}},
@@ -565,7 +671,39 @@ ${L('VirusTotal','https://www.virustotal.com/','Scan files, domains, IPs and URL
    if(d.cert)body+=card('Last HTTPS certificate',kv({subject:d.cert.subject,issuer:d.cert.issuer,valid_from:d.cert.valid_from,valid_to:d.cert.valid_to,sha256:d.cert.sha256})+(d.cert.sans.length?`<div class="cfg" style="margin-top:10px">${esc(d.cert.sans.join('\n'))}</div>`:''));
    if(d.whois)body+=card('WHOIS',raw('Show WHOIS text',d.whois));
    return body+card('More on VirusTotal',link)}},
- mail:{cat:'sec',i:'✉️',label:'Email Security',title:'Email security check',sub:'SPF, DKIM and DMARC: can someone spoof this domain?',ph:'example.com (optional DKIM selector: example.com selector1)',ex:['google.com','github.com'],
+ mhealth:{cat:'mail',i:'🩺',label:'Email Health',title:'Email health report',sub:'One report for a domain: mail servers, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, BIMI, DNSSEC and blocklists.',ph:'example.com (optional DKIM selector: example.com selector1)',ex:['hkelectric.com','google.com','github.com'],
+  help:'Like a medical check-up for email. We look at the <b>mail servers</b> (MX), the three anti-spoofing records <b>SPF</b>, <b>DKIM</b> and <b>DMARC</b>, encrypted delivery (<b>MTA-STS</b>, <b>TLS-RPT</b>), <b>BIMI</b> logos, <b>DNSSEC</b> and whether the mail servers are on <b>blocklists</b>. You get a grade and a list of <b>Problems</b>, <b>Warnings</b> and <b>Passed</b> checks, each with a plain explanation of how to fix it. We cannot test SMTP connections (the free plan blocks port 25), so everything is read from DNS and public lists.',
+  async run(v){const[q,sel]=v.trim().split(/\s+/),d=await api('mailhealth',sel?{q,sel}:{q}),C=mailChecks(d),gc=C.grade<'C'?'ok':C.grade==='C'?'warn':'bad';
+   return card('Overall',`<div class="grade ${gc}">${C.grade}</div><p class="mut">Score ${C.score}/100 for ${esc(d.domain)}</p><p>${pill('bad',C.counts.bad+' Problems')} ${pill('warn',C.counts.warn+' Warnings')} ${pill('ok',C.counts.ok+' Passed')}</p>`)
+    +C.groups.map(g=>card(g.name,`<table>${g.items.map(i=>`<tr><td style="white-space:nowrap">${pill(OKS[i.s][0],OKS[i.s][1])}</td><td><b>${esc(i.t)}</b>${i.d?`<br><span class="mut">${esc(i.d)}</span>`:''}</td></tr>`).join('')}</table>`)).join('')
+    +card('Good to know','<p class="mut">Blocklists use DNS queries, and some refuse public DNS servers, so a missing answer is not a failure. DKIM selectors are guessed from common names. For details use <b>MX Lookup</b>, <b>DMARC Check</b> and <b>SPF/DKIM</b> in this category.</p>')}},
+ mx:{cat:'mail',i:'📬',label:'MX Lookup',title:'MX lookup',sub:'The mail servers of a domain, their IP addresses and reverse DNS.',ph:'example.com (you can paste a full URL or an email domain)',ex:['hkelectric.com','gmail.com','outlook.com'],
+  help:'<b>MX records</b> say which servers accept email for a domain. The number is the <b>priority</b>: the lowest is tried first and the others are backups. For each server we show its <b>IPv4 and IPv6</b> addresses and the <b>reverse DNS (PTR)</b> name, and we name the provider when we recognise it (Google Workspace, Microsoft 365, Proofpoint, Mimecast and more). Common problems: an MX that is a <b>CNAME</b>, a server name that does not resolve, or no reverse DNS.',
+  async run(v){const d=await api('mx',{q:v});
+   if(d.nxdomain)return card('Result','<b class="bad">This domain does not exist (NXDOMAIN).</b>');
+   if(d.null_mx)return card('Result','<b>Null MX:</b> <span class="mut">this domain says it does not receive email.</span>');
+   if(!d.hosts.length)return card('Result','<b class="bad">No MX records.</b> <span class="mut">Mail servers will fall back to the A record of the domain, which is unreliable. Add MX records.</span>');
+   const rows=d.hosts.map(h=>`<tr><td><b>${h.pref}</b></td><td>${esc(h.host)}${h.cname?'<br>'+pill('bad','CNAME to '+esc(h.cname)):''}</td><td>${esc([...h.ips,...h.ipv6].join(', ')||'no address')}${!h.ips.length&&!h.ipv6.length?'<br>'+pill('bad','does not resolve'):''}</td><td class="mut">${h.ptr.length?h.ptr.map(x=>esc(x.ptr.join(', ')||'none')).join('<br>'):''}</td><td class="mut">${hms(h.ttl)}</td></tr>`).join('');
+   return card('Summary',kv({domain:v,mail_servers:d.hosts.length,provider:d.provider||'Not recognised (own or other provider)',backup_server:d.hosts.length>1?'Yes':'No'}))
+    +card('MX records',`<table><tr class="mut"><td>Priority</td><td>Mail server</td><td>IP addresses</td><td>Reverse DNS</td><td>TTL</td></tr>${rows}</table>`)
+    +card('How to read this','<p class="mut">Mail is delivered to the lowest priority number first. If that server is down, the next one is tried. The reverse DNS (PTR) name should match the server; receivers use it to judge whether a server is trustworthy.</p>')}},
+ dmarc:{cat:'mail',i:'🛂',label:'DMARC Check',title:'DMARC check',sub:'Read and explain the DMARC policy of a domain and see how to strengthen it.',ph:'example.com (you can paste a full URL)',ex:['google.com','github.com','hkelectric.com'],
+  help:'<b>DMARC</b> tells receiving mail servers what to do with email that pretends to be from your domain but fails <b>SPF</b> and <b>DKIM</b> checks. <b>p=none</b> only watches, <b>p=quarantine</b> sends fakes to spam, <b>p=reject</b> blocks them. The <b>rua</b> address receives daily summary reports. We read the record at <code>_dmarc.yourdomain</code> (or the parent domain for subdomains), explain every tag and warn about weak settings.',
+  async run(v){const d=await api('dmarc',{q:v});
+   if(!d.found)return card('Result','<b class="bad">No DMARC record found.</b>')+card('How to start',`<p class="mut">Add a TXT record named <b>_dmarc.${esc(v)}</b> with the value <b>v=DMARC1; p=none; rua=mailto:dmarc@${esc(v)}</b>. This only monitors, so nothing breaks. Read the reports for a few weeks, then move to quarantine and finally reject.</p>`);
+   const p=(d.tags.p||'').toLowerCase(),good=p==='reject'||p==='quarantine',W=[];
+   if(!good)W.push(['warn','Policy is "'+(p||'missing')+'": fake mail is still delivered.']);
+   if(d.tags.pct&&+d.tags.pct<100)W.push(['warn','pct='+d.tags.pct+': only part of the mail is checked.']);
+   if(!d.rua.length)W.push(['warn','No rua address: you will not receive aggregate reports.']);
+   d.external.filter(x=>!x.authorized).forEach(x=>W.push(['warn','Reports to '+x.domain+' are not authorised there (missing '+d.at_domain+'._report._dmarc.'+x.domain+').']));
+   if(d.tags.sp&&d.tags.sp.toLowerCase()==='none'&&good)W.push(['warn','Subdomains use sp=none, so they are not protected.']);
+   if(good&&!W.length)W.push(['ok','Policy is enforced and reports are configured.']);
+   const steps=p==='reject'?'<p class="mut">You are at the strongest setting. Keep reading the reports to catch new legitimate senders.</p>':p==='quarantine'?'<ol class="mut"><li>Keep reading the reports.</li><li>Raise pct to 100 if it is lower.</li><li>Move to p=reject once no legitimate mail fails.</li></ol>':'<ol class="mut"><li>Add a <b>rua</b> address and read the reports for 2 to 4 weeks.</li><li>Fix legitimate senders that fail SPF or DKIM.</li><li>Move to <b>p=quarantine</b> with pct=25, then raise to 100.</li><li>Move to <b>p=reject</b>.</li></ol>';
+   return card('Verdict',`<div class="grade ${good?'ok':'warn'}" style="font-size:34px">${esc(p||'no policy')}</div>`+W.map(w=>`<p>${pill(w[0],w[0]==='ok'?'OK':'Check')} ${esc(w[1])}</p>`).join(''))
+    +card('Record',`<div class="cfg">${esc(d.record)}</div><p class="mut">Found at _dmarc.${esc(d.at_domain)}${d.inherited?' (inherited from the parent domain)':''}</p>`)
+    +card('What each tag means',`<table><tr class="mut"><td>Tag</td><td>Value</td><td>Meaning</td></tr>${Object.entries(d.tags).map(([k,x])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(x)}</td><td class="mut">${esc(DM[k]||'')}</td></tr>`).join('')}</table>`)
+    +card('How to strengthen it',steps)}},
+ mail:{cat:'mail',i:'✉️',label:'Email Security',title:'Email security check',sub:'SPF, DKIM and DMARC: can someone spoof this domain?',ph:'example.com (optional DKIM selector: example.com selector1)',ex:['google.com','github.com'],
   help:'These three DNS records stop others from sending fake email as your domain. <b>SPF</b> lists allowed mail servers, <b>DMARC</b> says what to do with fakes (<b>reject</b> is strongest, <b>none</b> only monitors), and <b>DKIM</b> signs messages. DKIM needs a <b>selector</b> name (find it in an email header, e.g. selector1 or google).',
   async run(v){const[q,sel]=v.trim().split(/\s+/),d=await api('mailsec',sel?{q,sel}:{q});
    const sp=!d.spf?['bad','Missing']:d.spf_all==='-all'?['ok','Strict (-all)']:d.spf_all==='~all'?['warn','Soft fail (~all)']:['bad','Weak ('+(d.spf_all||'no "all"')+')'];
@@ -573,17 +711,52 @@ ${L('VirusTotal','https://www.virustotal.com/','Scan files, domains, IPs and URL
    return card('SPF',pill(sp[0],sp[1])+(d.spf?`<div class="cfg" style="margin-top:10px">${esc(d.spf)}</div>`:''))
     +card('DMARC',pill(dm[0],dm[1])+(d.dmarc?`<div class="cfg" style="margin-top:10px">${esc(d.dmarc)}</div>`+kv({subdomain_policy:d.dmarc_subdomain_policy,percent:d.dmarc_pct,report_address:d.dmarc_rua}):''))
     +card('DKIM',d.dkim_selector?(d.dkim?pill('ok','Found')+`<div class="cfg" style="margin-top:10px">${esc(cut(d.dkim,300))}</div>`:pill('bad','Not found for selector '+esc(d.dkim_selector))):'<span class="mut">Add a selector after the domain to check DKIM.</span>')}},
+ ehdr:{cat:'mail',i:'🧾',label:'Header Analyzer',title:'Email header analyzer',sub:'Paste the raw headers of an email to see the route, delays and SPF, DKIM and DMARC results.',
+  help:'In your mail program choose <b>View source</b> or <b>Show original</b> and copy the headers. We show where the message travelled (each <b>Received</b> hop), how long each step took, whether it was encrypted, and what <b>SPF</b>, <b>DKIM</b> and <b>DMARC</b> said. We also flag common phishing signs, such as a different <b>Reply-To</b> or a sender that does not match the signing domain. <b>Everything is analysed in your browser.</b>',
+  run:()=>`<div class="card"><label>Raw email headers<textarea id="eh1" rows="10" placeholder="Received: from mail.example.com (mail.example.com [203.0.113.5]) by mx.google.com with ESMTPS ...&#10;Authentication-Results: mx.google.com; spf=pass ...&#10;From: ...&#10;Subject: ..."></textarea></label><div class="acts" style="justify-content:flex-start;margin-top:12px"><button id="eh2" style="background:var(--ac);color:#fff;border-color:var(--ac)">Analyze</button></div></div><div id="eo"></div>`,
+  after(){$('#eh2').onclick=()=>{const txt=$('#eh1').value;if(!/^[\w-]+:/m.test(txt)){$('#eo').innerHTML=card('Result','<b class="bad">That does not look like email headers. Paste lines such as Received:, From: and Subject:.</b>');return}
+   const r=parseMail(txt),F=mailFindings(r),V=(k,x)=>pill(x==='pass'?'ok':!x?'mut':/fail|permerror/.test(x)?'bad':'warn',k+': '+(x||'none'));
+   const route=r.hops.map((x,i)=>`<tr><td class="mut">${i+1}</td><td>${esc(x.from||'')}</td><td>${esc(x.by||'')}</td><td>${x.ip?`<button data-w="run" data-tool="inv" data-v="${esc(x.ip)}">${esc(x.ip)}</button>`:''}</td><td>${x.tls?pill('ok','TLS'):pill('mut',esc(x.with||'?'))}</td><td class="mut" style="white-space:nowrap">${x.t!=null?esc(new Date(x.t).toISOString().slice(0,19).replace('T',' '))+' UTC':''}</td><td class="${x.delay==null?'mut':x.delay>120?'bad':x.delay>30?'warn':'ok'}">${x.delay==null?'':dur(x.delay)}</td></tr>`).join('');
+   $('#eo').innerHTML=card('Authentication',`<p>${V('SPF',r.spf)} ${V('DKIM',r.dkim)} ${V('DMARC',r.dmarc)}</p>`+(r.hasAuth||r.spf?'':'<p class="mut">No Authentication-Results header found. The receiving server may not add one.</p>'))
+    +card('Findings',F.map(f=>`<p>${pill(OKS[f[0]][0],OKS[f[0]][1])} ${esc(f[1])}</p>`).join(''))
+    +card('Message',kv({subject:r.subject,from:r.from,to:r.to,date:r.date,return_path:r.returnPath,reply_to:r.replyTo,message_id:r.msgid,total_delivery_time:r.total!=null?dur(r.total):undefined}))
+    +card('Delivery route (oldest first)',r.hops.length?`<table><tr class="mut"><td>#</td><td>From</td><td>By</td><td>IP</td><td>With</td><td>Time</td><td>Delay</td></tr>${route}</table>`:'<span class="mut">No Received headers found.</span>')
+    +(r.sigs.length?card('DKIM signatures',`<table><tr class="mut"><td>Domain (d=)</td><td>Selector (s=)</td><td>Algorithm</td></tr>${r.sigs.map(x=>`<tr><td>${esc(x.d||'')}</td><td>${esc(x.s||'')}</td><td class="mut">${esc(x.a||'')}</td></tr>`).join('')}</table>`):'')
+    +(r.spam.length?card('Spam filter headers',kv(Object.fromEntries(r.spam))):'')
+    +card('All headers ('+r.H.length+')',raw('Show all headers',r.H.map(x=>x[0]+': '+x[1]).join('\n')))}}},
  hdr:{cat:'sec',i:'🧱',label:'Security Headers',title:'HTTP security headers',sub:'Does a website send the headers that protect its visitors?',ph:'https://example.com',ex:['github.com','google.com'],
   help:'Browsers can block many attacks (clickjacking, script injection, downgrade to HTTP) when a site sends the right <b>headers</b>. Missing ones are shown in yellow. We only read the headers the site sends publicly.',
   async run(v){const d=await api('headers',{url:v}),n=Object.values(d.checks).filter(Boolean).length,c=n>=5?'ok':n>=3?'warn':'bad';
    const rows=Object.entries(d.checks).map(([k,x])=>`<tr><td><b>${esc(k)}</b></td><td>${x?pill('ok','Present'):pill('warn','Missing')}</td><td class="mut">${esc(cut(x||'',70))}</td></tr>`).join('');
    const ck=d.cookies.length?`<table>${d.cookies.map(x=>`<tr><td>${esc(x.name)}</td><td>${yn('Secure',!x.secure).replace(/Yes/,'Missing').replace(/No/,'OK')}</td></tr>`).join('')}</table>`:'<span class="mut">No cookies set.</span>';
    return card('Score',`<div class="score ${c}">${n}<small>/6 headers</small></div><p class="mut">${esc(d.url)} (HTTP ${d.status})</p>`+kv({server:d.server,powered_by:d.powered_by}))+card('Headers',`<table>${rows}</table>`)+card('Cookies',ck)}},
+ nvd:{cat:'sec',i:'📊',label:'NVD Dashboard',title:'NVD vulnerability dashboard',sub:'What is new in the National Vulnerability Database, and a keyword search.',ph:'product or keyword (leave blank for the dashboard)',opt:1,ex:['openssl','apache','fortinet'],
+  help:'The <b>NVD</b> (run by NIST) is the official list of known software flaws, called <b>CVEs</b>. The dashboard shows the total, how many flaws were published in the last 7 days by <b>severity</b>, how many are on the <b>CISA KEV</b> list (known to be exploited in real attacks), and the newest <b>critical</b> ones. Type a product name, such as <b>openssl</b>, to search it. Click any CVE to open its details in <b>CVE Lookup</b>. Official pages and the data feeds are linked below the results.',
+  async run(v){const d=await api('nvd',v?{k:v}:{}),sv=s=>pill(/CRITICAL|HIGH/.test(s||'')?'bad':s==='MEDIUM'?'warn':'ok',esc(s||'n/a')),
+   rows=L=>`<table><tr class="mut"><td>CVE</td><td>Score</td><td>Published</td><td>Description</td></tr>${L.map(x=>`<tr><td style="white-space:nowrap"><button data-w="run" data-tool="cve" data-v="${esc(x.id)}">${esc(x.id)}</button></td><td style="white-space:nowrap">${x.cvss!=null?esc(x.cvss):''} ${sv(x.severity)}${x.kev?' '+pill('bad','KEV'):''}</td><td class="mut" style="white-space:nowrap">${esc(x.published)}</td><td class="mut">${esc(cut(x.description,170))}</td></tr>`).join('')}</table>`;
+   const links=card('NVD links',lnks([['NVD home','https://nvd.nist.gov/'],['Data feeds','https://nvd.nist.gov/vuln/data-feeds'],['Search CVEs','https://nvd.nist.gov/vuln/search'],['API documentation','https://nvd.nist.gov/developers/vulnerabilities'],['CISA KEV catalog','https://www.cisa.gov/known-exploited-vulnerabilities-catalog']]));
+   if(d.mode==='search')return card('Results for "'+d.keyword+'"',`<p class="mut">${d.total} CVEs match. Showing the ${d.items.length} newest.</p>`+(d.items.length?rows(d.items):''))+links;
+   const c=d.counts;return card('NVD at a glance',kv({total_cves_in_nvd:d.total.toLocaleString(),known_exploited_cves_kev:d.kev_total.toLocaleString(),['critical_published_last_'+d.window_days+'_days']:c.CRITICAL,['high_published_last_'+d.window_days+'_days']:c.HIGH,['medium_published_last_'+d.window_days+'_days']:c.MEDIUM,['low_published_last_'+d.window_days+'_days']:c.LOW})+(d.api_key?'':'<p class="mut">Medium and low counts need a free NVD_API_KEY secret (it also raises the NVD rate limit).</p>'))
+    +card('Newest critical CVEs',d.critical.length?rows(d.critical):'<span class="mut">None in this period.</span>')+links}},
+ patch:{cat:'sec',i:'🩹',label:'Patch Check',title:'Verify patch installation on endpoints',sub:'Compare what is installed on your computers with the patches or fixed versions you require.',
+  help:'Step 1: list what must be installed, one per line: a Windows update like <b>KB5034441</b>, a minimum version like <b>openssl 3.0.13</b>, or a <b>CVE ID</b> (we fetch the vulnerable version ranges from NVD). Step 2: paste the inventory of each computer, starting each with a line like <b># PC-001</b>. Use <code>Get-HotFix</code> or <code>wmic qfe</code> on Windows, <code>dpkg -l</code> or <code>rpm -qa</code> on Linux. The table shows <b>OK</b>, <b>Missing / Vulnerable</b> or <b>Not installed</b> for each computer. Note: a newer cumulative Windows update can replace an older KB, so a "Missing" KB may still be covered. Runs in your browser; only CVE IDs are sent to NVD.',
+  run:()=>`<div class="card"><label>Required patches or versions (one per line)<textarea id="pc1" rows="4" placeholder="KB5034441&#10;openssl 3.0.13&#10;CVE-2024-3094"></textarea></label><label style="display:block;margin-top:12px">Endpoint inventory (start each computer with # name)<textarea id="pc2" rows="9" placeholder="# PC-001&#10;HotFixID : KB5034441&#10;# server-01&#10;ii  openssl  3.0.11-1~deb12u2  amd64&#10;xz-utils 5.6.0"></textarea></label><div class="acts" style="justify-content:flex-start;margin-top:12px"><button id="pc3" style="background:var(--ac);color:#fff;border-color:var(--ac)">Verify</button></div></div><div id="pco"></div>`,
+  after(){$('#pc3').onclick=async()=>{const out2=$('#pco'),req=$('#pc1').value.split('\n').map(x=>x.trim()).filter(Boolean),eps=parseInv($('#pc2').value);
+   if(!req.length||!eps.length){out2.innerHTML=card('Result','<b class="bad">Add at least one requirement and one endpoint.</b>');return}
+   out2.innerHTML='<div class="card mut"><span class="sp"></span>Checking…</div>';const rules=[];
+   for(const l of req){let m;if(m=/^KB\d{6,8}$/i.exec(l))rules.push({type:'kb',id:l.toUpperCase(),label:l.toUpperCase()});
+    else if(/^CVE-\d{4}-\d{4,7}$/i.test(l)){try{const d=await api('cve',{q:l});rules.push({type:'cve',id:d.id,label:d.id,ranges:(d.affected||[]).filter(x=>x.vendor).map(x=>({product:x.product,version:x.version,start:x.start,end_excl:x.end_excl,end_incl:x.end_incl}))})}catch(e){rules.push({type:'cve',id:l,label:l,ranges:[],err:e.message})}}
+    else if(m=/^(.+?)\s*(?:>=|=>|[\s:,])\s*v?(\d+(?:\.\d+)*[\w.+~-]*)$/.exec(l))rules.push({type:'ver',name:m[1].trim(),min:m[2],label:m[1].trim()+' '+m[2]+'+'})}
+   if(!rules.length){out2.innerHTML=card('Result','<b class="bad">No valid requirements. Use KB numbers, "name version" or CVE IDs.</b>');return}
+   const R=eps.map(ep=>({ep,res:rules.map(r=>evalRule(r,ep))})),okc=R.filter(x=>x.res.every(y=>y.s!=='bad')).length,bad=R.reduce((n,x)=>n+x.res.filter(y=>y.s==='bad').length,0);
+   out2.innerHTML=card('Summary',`<div class="grade ${bad?'bad':'ok'}" style="font-size:34px">${okc} of ${R.length} endpoints OK</div><p class="mut">${bad} finding${bad===1?'':'s'} to fix. ${rules.filter(r=>r.err).map(r=>esc(r.id)+': NVD lookup failed ('+esc(r.err)+')').join(' ')}</p>`)
+    +card('Results by endpoint',`<table><tr class="mut"><td>Endpoint</td>${rules.map(r=>`<td>${esc(r.label)}</td>`).join('')}</tr>${R.map(x=>`<tr><td><b>${esc(x.ep.name)}</b><br><span class="mut">${x.ep.kb.size} updates, ${x.ep.sw.length} software entries</span></td>${x.res.map(y=>`<td>${pill(y.s,esc(y.s==='ok'?'OK':y.s==='bad'?'Fix':'n/a'))}<br><span class="mut">${esc(y.t)}</span></td>`).join('')}</tr>`).join('')}</table>`)
+    +card('How to read this','<p class="mut"><b>OK</b>: patched. <b>Fix</b>: the update is missing or the software is in a vulnerable range. <b>n/a</b>: the software was not found on that computer. Version matching uses the product name, so double-check unusual product names against the vendor advisory.</p>')}}},
  cve:{cat:'sec',i:'🐞',label:'CVE Lookup',title:'CVE lookup',sub:'Severity, exploit likelihood and whether it is actively exploited.',ph:'CVE-2021-44228',ex:['CVE-2021-44228','CVE-2024-3400'],
   help:'<b>CVSS</b> rates how severe a flaw is (0 to 10). <b>EPSS</b> estimates the chance it will be exploited in the next 30 days. <b>KEV</b> means CISA confirmed it is being exploited in real attacks, so patch those first. Data from NVD and FIRST.',
   async run(v){const d=await api('cve',{q:v}),c=d.cvss>=7?'bad':d.cvss>=4?'warn':'ok';
    return card(d.id,`<div class="score ${c}">${d.cvss??'?'}<small>/10 ${esc(d.severity||'')}</small></div>`+(d.kev?`<p>${pill('bad','Actively exploited (CISA KEV)')} <span class="mut">added ${esc(d.kev.added)}, fix due ${esc(d.kev.due)}</span></p>`:'')+`<p>${esc(d.description||'')}</p>`)
-    +card('Details',kv({exploit_probability_epss:d.epss!=null?(d.epss*100).toFixed(2)+'% (top '+((1-d.epss_percentile)*100).toFixed(1)+'%)':undefined,vector:d.vector,published:d.published,last_modified:d.modified}))+card('References',lnks(d.references.map(u=>[cut(u.replace(/^https?:\/\//,''),38),u])))}},
+    +card('Details',kv({exploit_probability_epss:d.epss!=null?(d.epss*100).toFixed(2)+'% (top '+((1-d.epss_percentile)*100).toFixed(1)+'%)':undefined,vector:d.vector,published:d.published,last_modified:d.modified}))+((d.affected||[]).length?card('Affected versions (from NVD)',`<table><tr class="mut"><td>Product</td><td>Vulnerable versions</td></tr>${d.affected.map(x=>`<tr><td>${esc((x.vendor||'')+' '+(x.product||''))}</td><td class="mut">${esc(x.version?'version '+x.version:[x.start?'from '+x.start:'',x.end_excl?'before '+x.end_excl:'',x.end_incl?'up to '+x.end_incl:''].filter(Boolean).join(', ')||'all versions')}</td></tr>`).join('')}</table>`):'')+card('References',lnks(d.references.map(u=>[cut(u.replace(/^https?:\/\//,''),38),u])))}},
  dec:{cat:'sec',i:'🧪',label:'Decoder',title:'Decoder (CyberChef-lite)',sub:'Decode or encode strings. Everything stays in your browser.',
   help:'Pick an operation and press <b>Apply</b>. Use <b>Use output as input</b> to chain steps, for example Base64 decode, then URL decode. Handy for obfuscated URLs, PowerShell <code>-enc</code> commands and gzip+Base64 payloads. <b>Nothing is sent to a server.</b>',
   run:()=>`<div class="card"><label>Input<textarea id="d1" rows="5"></textarea></label><div class="acts" style="justify-content:flex-start;flex-wrap:wrap;margin:12px 0"><select id="d2" style="width:auto">${Object.keys(OPS).map(k=>`<option>${esc(k)}</option>`).join('')}</select><button id="d3" style="background:var(--ac);color:#fff;border-color:var(--ac)">Apply</button><button id="d4">Use output as input</button></div><label>Output<textarea id="d5" rows="5" readonly></textarea></label></div>`,
@@ -658,7 +831,7 @@ abar.onclick=e=>{const b=e.target.closest('button');if(!b)return;const S=STATE[c
  if(b.id==='ej')save(fn('json'),JSON.stringify(exportObj(S,ts),null,2),'application/json');
  if(b.id==='ec')save(fn('csv'),'\ufeff'+toCSV(exportObj(S,ts)),'text/csv');
  if(b.id==='ew'){wl.add(S.chk,cur);b.textContent='Saved ✓'}};
-out.onclick=e=>{const w=e.target.closest('[data-w]');if(w)return wAct(w);const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(b&&b.id==='cpg'){try{navigator.clipboard.writeText($('#cfgout').textContent);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rc'){try{navigator.clipboard.writeText(REP);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rd')return save('triage-'+REPN+'.md',REP,'text/markdown');if(!b||!ip)return;
+out.onclick=e=>{const sc=e.target.closest('[data-sc]');if(sc){document.getElementById(sc.dataset.sc)?.scrollIntoView({behavior:'smooth'});return}const w=e.target.closest('[data-w]');if(w)return wAct(w);const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(b&&b.id==='cpg'){try{navigator.clipboard.writeText($('#cfgout').textContent);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rc'){try{navigator.clipboard.writeText(REP);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rd')return save('triage-'+REPN+'.md',REP,'text/markdown');if(!b||!ip)return;
  if(b.id==='cp'){try{navigator.clipboard.writeText(ip.textContent);b.textContent='Copied ✓'}catch{}}
  if(b.id==='hd'){ip.classList.toggle('blur');b.textContent=ip.classList.contains('blur')?'Show IP':'Hide IP'}};
 $('#help').onclick=e=>{if(e.target.closest('#gem'))askGemini()};

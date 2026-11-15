@@ -419,6 +419,7 @@ async function cve(id) {
   return [{ id, published: c.published, modified: c.lastModified, description: (c.descriptions || []).find(x => x.lang === 'en')?.value,
     cvss: m.baseScore, severity: m.baseSeverity, vector: m.vectorString, epss: ep ? +ep.epss : undefined, epss_percentile: ep ? +ep.percentile : undefined,
     kev: c.cisaExploitAdd ? { added: c.cisaExploitAdd, due: c.cisaActionDue } : undefined,
+    affected: [...new Map((c.configurations || []).flatMap(cf => cf.nodes || []).flatMap(n => n.cpeMatch || []).filter(m => m.vulnerable).map(m => { const p = m.criteria.split(':'); const o = { vendor: p[3], product: p[4], version: p[5] !== '*' && p[5] !== '-' ? p[5] : undefined, start: m.versionStartIncluding || m.versionStartExcluding, end_excl: m.versionEndExcluding, end_incl: m.versionEndIncluding }; return [JSON.stringify(o), o]; })).values()].slice(0, 30),
     references: (c.references || []).map(x => x.url).filter(x => /^https?:\/\//.test(x)).slice(0, 6) }, 200];
 }
 async function mailsec(q, sel) {
@@ -509,6 +510,177 @@ async function rawHeaders(raw) {
   return [{ hops }, 200];
 }
 
+const doh = async (name, type) => {
+  try {
+    const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(5000) });
+    const d = await r.json();
+    return { status: d.Status, answers: d.Answer || [] };
+  } catch { return { status: -1, answers: [] }; }
+};
+const dohTxt = async n => (await doh(n, 'TXT')).answers.filter(a => a.type === 16).map(a => a.data.replace(/^"|"$/g, '').replace(/" "/g, ''));
+const rdnsName = ip => ip.split('.').reverse().join('.') + '.in-addr.arpa';
+const MXPROV = [[/(^|\.)(google|googlemail)\.com$/, 'Google Workspace / Gmail'], [/protection\.outlook\.com$/, 'Microsoft 365 (Exchange Online)'], [/(pphosted|ppe-hosted)\.com$/, 'Proofpoint'], [/mimecast(-offshore)?\.com$/, 'Mimecast'], [/zoho\.(com|eu|in|com\.au)$/, 'Zoho Mail'], [/mx\.cloudflare\.net$/, 'Cloudflare Email Routing'], [/barracudanetworks\.com$/, 'Barracuda'], [/messagelabs\.com$/, 'Broadcom Email Security'], [/secureserver\.net$/, 'GoDaddy'], [/yahoodns\.net$/, 'Yahoo Mail'], [/icloud\.com$/, 'Apple iCloud Mail'], [/mailgun\.org$/, 'Mailgun'], [/protonmail\.ch$/, 'Proton Mail'], [/fastmail\.com$/, 'Fastmail']];
+async function mxInfo(q, o = {}) {
+  const r = await doh(q, 'MX');
+  const rows = r.answers.filter(a => a.type === 15).map(a => { const [p, h] = a.data.split(' '); return { pref: +p, host: (h || '').replace(/\.$/, '').toLowerCase(), ttl: a.TTL }; }).sort((a, b) => a.pref - b.pref);
+  const hosts = await Promise.all(rows.slice(0, o.hosts || 6).map(async m => {
+    if (!m.host) return { ...m, ips: [], ipv6: [], ptr: [] };
+    const [a, aaaa] = await Promise.all([doh(m.host, 'A'), o.aaaa ? doh(m.host, 'AAAA') : { answers: [] }]);
+    const ips = a.answers.filter(x => x.type === 1).map(x => x.data), cn = a.answers.find(x => x.type === 5);
+    const ptr = await Promise.all(ips.slice(0, o.ptr || 0).map(async ip => ({ ip, ptr: (await doh(rdnsName(ip), 'PTR')).answers.filter(x => x.type === 12).map(x => x.data.replace(/\.$/, '')) })));
+    return { ...m, ips, ipv6: aaaa.answers.filter(x => x.type === 28).map(x => x.data), cname: cn ? cn.data.replace(/\.$/, '') : undefined, ptr };
+  }));
+  const first = hosts.find(h => h.host);
+  return { nxdomain: r.status === 3, null_mx: rows.length === 1 && !rows[0].host, hosts: hosts.filter(h => h.host), provider: first ? MXPROV.find(([re]) => re.test(first.host))?.[1] : undefined };
+}
+async function spfInfo(q) {
+  const recs = (await dohTxt(q)).filter(x => /^v=spf1(\s|$)/i.test(x));
+  if (!recs.length) return { found: false };
+  let lookups = 0, fetches = 0; const incl = [];
+  const walk = async (rec, depth) => {
+    for (const t of rec.split(/\s+/).slice(1)) {
+      const m = /^[+\-~?]?include:(.+)$/i.exec(t) || /^redirect=(.+)$/i.exec(t);
+      if (m) { lookups++; incl.push(m[1]); if (depth < 3 && fetches < 8) { fetches++; const sub = (await dohTxt(m[1])).find(x => /^v=spf1(\s|$)/i.test(x)); if (sub) await walk(sub, depth + 1); } }
+      else if (/^[+\-~?]?(a|mx|ptr|exists)([:\/]|$)/i.test(t)) lookups++;
+    }
+  };
+  await walk(recs[0], 0);
+  const all = /(?:^|\s)([+\-~?]?)all(?:\s|$)/i.exec(recs[0]);
+  return { found: true, record: recs[0], count: recs.length, all: all ? (all[1] || '+') + 'all' : /redirect=/i.test(recs[0]) ? 'redirect' : null, lookups, includes: [...new Set(incl)].slice(0, 15), truncated: fetches >= 8 };
+}
+async function dmarcInfo(q) {
+  const labels = q.split('.');
+  let rec = null, at = null;
+  for (let i = 0; i < Math.min(labels.length - 1, 3) && !rec; i++) {
+    const name = labels.slice(i).join('.');
+    rec = (await dohTxt('_dmarc.' + name)).find(x => /^v=DMARC1/i.test(x)) || null;
+    if (rec) at = name;
+  }
+  if (!rec) return { found: false };
+  const tags = Object.fromEntries(rec.split(';').map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf('='); return [x.slice(0, i).trim().toLowerCase(), x.slice(i + 1).trim()]; }));
+  const addrs = k => (tags[k] || '').split(',').map(x => x.trim().replace(/^mailto:/i, '')).filter(Boolean);
+  const rua = addrs('rua'), ruf = addrs('ruf');
+  const ext = [...new Set([...rua, ...ruf].map(x => x.split('@')[1]).filter(d => d && !(d === at || d.endsWith('.' + at))))].slice(0, 3);
+  const external = await Promise.all(ext.map(async d => ({ domain: d, authorized: (await dohTxt(`${at}._report._dmarc.${d}`)).some(x => /^v=DMARC1/i.test(x)) })));
+  return { found: true, record: rec, at_domain: at, inherited: at !== q, tags, rua, ruf, external };
+}
+const DKIM_SEL = ['default', 'selector1', 'selector2', 'google', 'k1', 's1'];
+const spkiBits = b64 => { const n = Math.floor(b64.length * 3 / 4) - 38; const bits = Math.max(0, n) * 8; return [512, 1024, 2048, 3072, 4096].reduce((a, b) => Math.abs(b - bits) < Math.abs(a - bits) ? b : a); };
+async function dkimProbe(q, sel) {
+  const rs = await Promise.all((sel ? [sel] : DKIM_SEL).map(async x => {
+    const t = (await dohTxt(`${x}._domainkey.${q}`)).find(r => /v=DKIM1|p=/i.test(r));
+    if (!t) return null;
+    const p = /p=([A-Za-z0-9+\/=]+)/.exec(t.replace(/\s/g, ''))?.[1];
+    return { selector: x, record: t.slice(0, 160), key_bits: p ? spkiBits(p) : undefined };
+  }));
+  return rs.filter(Boolean);
+}
+async function mtaSts(q) {
+  const t = (await dohTxt('_mta-sts.' + q)).find(x => /^v=STSv1/i.test(x));
+  if (!t) return { found: false };
+  let policy = null;
+  const u = safeUrl(`https://mta-sts.${q}/.well-known/mta-sts.txt`);
+  if (u) { try { const r = await fetch(u.href, { redirect: 'manual', signal: AbortSignal.timeout(5000) }); if (r.ok) { const x = (await r.text()).slice(0, 2000); policy = { mode: /mode:\s*(\w+)/i.exec(x)?.[1], max_age: +(/max_age:\s*(\d+)/i.exec(x)?.[1] || 0), mx: [...x.matchAll(/^mx:\s*(\S+)/gim)].map(m => m[1]) }; } } catch {} }
+  return { found: true, record: t, policy };
+}
+const DNSBL = [['Spamhaus ZEN', 'zen.spamhaus.org'], ['SpamCop', 'bl.spamcop.net'], ['PSBL', 'psbl.surriel.com'], ['UCEPROTECT L1', 'dnsbl-1.uceprotect.net']];
+async function dnsbl(ip) {
+  const rev = ip.split('.').reverse().join('.');
+  return Promise.all(DNSBL.map(async ([name, zone]) => {
+    const r = await doh(`${rev}.${zone}`, 'A'), a = r.answers.find(x => x.type === 1);
+    if (a) return { name, state: /^127\.255\.255\./.test(a.data) ? 'unavailable' : 'listed', code: a.data };
+    return { name, state: r.status === 3 || r.status === 0 ? 'clear' : 'unavailable' };
+  }));
+}
+async function mailHealth(q, sel) {
+  const [mx, spf, dmarc, dkim, mta, tr, bimi, ds] = await Promise.all([mxInfo(q, { hosts: 4, ptr: 1 }), spfInfo(q), dmarcInfo(q), dkimProbe(q, sel), mtaSts(q), dohTxt('_smtp._tls.' + q), dohTxt('default._bimi.' + q), doh(q, 'DS')]);
+  const ips = [...new Set(mx.hosts.flatMap(h => h.ips))].slice(0, 2);
+  const blocklists = await Promise.all(ips.map(async ip => ({ ip, lists: await dnsbl(ip) })));
+  return { domain: q, mx, spf, dmarc, dkim, mta_sts: mta, tls_rpt: tr.find(x => /^v=TLSRPTv1/i.test(x)) || null, bimi: bimi.find(x => /^v=BIMI1/i.test(x)) || null, dnssec: ds.answers.some(a => a.type === 43), blocklists };
+}
+
+const CLOUD = {
+  m365: { name: 'Microsoft 365', page: 'https://status.cloud.microsoft/m365', feed: 'https://status.cloud.microsoft/api/feed/mac' },
+  azure: { name: 'Microsoft Azure', page: 'https://azure.status.microsoft/en-us/status', feed: 'https://rssfeed.azure.status.microsoft/en-us/status/feed/' },
+  aws: { name: 'Amazon Web Services', page: 'https://health.aws.amazon.com/health/status', feed: 'https://status.aws.amazon.com/rss/all.rss' },
+  gcp: { name: 'Google Cloud', page: 'https://status.cloud.google.com/', feed: 'https://status.cloud.google.com/en/feed.atom', products: 'https://status.cloud.google.com/products.json' },
+  cloudflare: { name: 'Cloudflare', page: 'https://www.cloudflarestatus.com/', feed: 'https://www.cloudflarestatus.com/history.atom', api: 'https://www.cloudflarestatus.com/api/v2/summary.json' },
+  github: { name: 'GitHub', page: 'https://www.githubstatus.com/', feed: 'https://www.githubstatus.com/history.rss', api: 'https://www.githubstatus.com/api/v2/summary.json' },
+  claude: { name: 'Claude (Anthropic)', page: 'https://status.claude.com/', feed: 'https://status.claude.com/history.rss', api: 'https://status.claude.com/api/v2/summary.json' },
+};
+const CORE = {
+  m365: [['Exchange Online', 'exchange'], ['Microsoft Teams', 'teams'], ['SharePoint Online', 'sharepoint'], ['OneDrive', 'onedrive'], ['Outlook', 'outlook'], ['Microsoft Entra ID', 'entra|active directory|sign-in|authentication'], ['Intune', 'intune'], ['Microsoft 365 apps', 'word|excel|powerpoint|office']],
+  azure: [['Virtual Machines', 'virtual machine|\\bvm'], ['Storage', 'storage'], ['Microsoft Entra ID', 'entra|active directory'], ['App Service', 'app service'], ['SQL Database', 'sql'], ['Azure DNS', '\\bdns'], ['Networking', 'network|front door|load balancer|vpn'], ['Kubernetes Service', 'kubernetes|aks'], ['Functions', 'functions'], ['Key Vault', 'key vault']],
+  aws: [['EC2', '^ec2'], ['S3', '^s3'], ['Route 53', '^route53'], ['CloudFront', '^cloudfront'], ['RDS', '^rds'], ['Lambda', '^lambda'], ['DynamoDB', '^dynamodb'], ['IAM', '^iam'], ['EKS', '^eks'], ['ECS', '^ecs'], ['CloudWatch', '^cloudwatch'], ['VPC', '^vpc']],
+  gcp: [['Compute Engine', 'compute engine', 'Google Compute Engine'], ['Cloud Storage', 'cloud storage', 'Google Cloud Storage'], ['Kubernetes Engine', 'kubernetes engine|gke', 'Google Kubernetes Engine'], ['BigQuery', 'bigquery', 'Google BigQuery'], ['Cloud Run', 'cloud run', 'Cloud Run'], ['Cloud SQL', 'cloud sql', 'Google Cloud SQL'], ['Cloud DNS', 'cloud dns', 'Google Cloud DNS'], ['Load Balancing', 'load balanc', 'Cloud Load Balancing'], ['IAM', 'identity and access|\\biam\\b', 'Identity and Access Management'], ['Pub/Sub', 'pub/sub', 'Google Cloud Pub/Sub'], ['Functions', 'cloud functions', 'Google Cloud Functions'], ['VPC', 'vpc|virtual private cloud', 'Virtual Private Cloud (VPC)']],
+};
+const decode = x => String(x || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+const strip = x => decode(x).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+function parseFeed(text) {
+  return [...text.matchAll(/<(item|entry)[\s>]([\s\S]*?)<\/\1>/g)].slice(0, 300).map(m => {
+    const b = m[2], g = tag => { const x = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i').exec(b); return x ? strip(x[1]) : ''; };
+    return { title: g('title'), link: /<link[^>]*href="([^"]+)"/i.exec(b)?.[1] || g('link') || g('guid'), date: g('pubDate') || g('updated') || g('published'), summary: (g('description') || g('summary') || g('content')).slice(0, 400), guid: g('guid') || g('id') };
+  });
+}
+const RESOLVED = /\b(resolved|restored|mitigated|completed|operating normally|no longer)\b/i;
+async function cloud(p) {
+  const P = CLOUD[p];
+  if (!P) return [{ error: 'Unknown provider' }, 400];
+  const out = { id: p, name: P.name, page: P.page, feed: P.feed, checked: new Date().toISOString(), status: 'unknown', summary: '', active: [], recent: [], tiles: [] };
+  const get = (u, n = 150000) => fetch(u, { headers: { 'user-agent': 'NetTools-CloudHealth/1.0', accept: '*/*' }, signal: AbortSignal.timeout(8000), cf: { cacheTtl: 60, cacheEverything: true } }).then(async r => { if (!r.ok) throw new Error(r.status); return (await r.text()).slice(0, n); });
+  try {
+    if (P.api) {
+      const d = JSON.parse(await get(P.api, 500000));
+      out.status = { none: 'ok', minor: 'degraded', major: 'outage', critical: 'outage', maintenance: 'ok' }[d.status?.indicator] || 'unknown';
+      out.summary = d.status?.description || '';
+      out.tiles = (d.components || []).filter(c => !c.group).slice(0, 16).map(c => ({ name: c.name, status: c.status === 'operational' ? 'ok' : c.status === 'major_outage' ? 'bad' : 'warn', detail: String(c.status).replace(/_/g, ' '), link: P.page }));
+      out.active = (d.incidents || []).map(i => ({ title: i.name, link: i.shortlink || P.page, date: i.updated_at || i.created_at, summary: strip(i.incident_updates?.[0]?.body || '').slice(0, 300), severity: /critical|major/.test(i.impact) ? 'major' : 'minor' }));
+      out.maintenance = (d.scheduled_maintenances || []).length;
+    } else {
+      let ev = parseFeed(await get(P.feed)).map(x => ({ ...x, t: Date.parse(x.date) || 0 })).sort((a, b) => b.t - a.t);
+      let act;
+      if (p === 'aws') {
+        const seen = new Set();
+        ev = ev.filter(x => { const slug = /#(.+?)_\d+$/.exec(x.guid)?.[1] || x.guid; x.slug = slug; if (seen.has(slug)) return false; seen.add(slug); return true; });
+        act = ev.filter(x => !RESOLVED.test(x.title) && Date.now() - x.t < 14 * 864e5).map(x => ({ ...x, severity: /^service disruption/i.test(x.title) ? 'major' : /^performance issues/i.test(x.title) ? 'minor' : 'info' }));
+      } else {
+        act = ev.filter(x => !RESOLVED.test(x.title + ' ' + x.summary) && Date.now() - x.t < 3 * 864e5).map(x => ({ ...x, severity: /outage|unavailable|cannot|can't|unable|down\b/i.test(x.title + ' ' + x.summary) ? 'major' : 'minor' }));
+      }
+      const view = x => ({ title: x.title, link: x.link || P.page, date: x.date, summary: x.summary.slice(0, 300), severity: x.severity });
+      out.active = act.map(view);
+      out.recent = ev.filter(x => Date.now() - x.t < 7 * 864e5).slice(0, 10).map(x => ({ ...view(x), resolved: RESOLVED.test(x.title + ' ' + x.summary) }));
+      let ids = {};
+      if (p === 'gcp') { try { const pr = JSON.parse(await get(P.products, 300000)); for (const x of (pr.products || pr)) ids[String(x.title).toLowerCase()] = x.id; } catch {} }
+      out.tiles = (CORE[p] || []).map(([name, re, pt]) => {
+        const hit = act.filter(x => new RegExp(re, 'i').test(p === 'aws' ? x.slug : x.title + ' ' + x.summary));
+        const id = pt && ids[pt.toLowerCase()];
+        return { name, status: hit.some(x => x.severity === 'major') ? 'bad' : hit.some(x => x.severity === 'minor') ? 'warn' : 'ok', detail: hit.length ? hit[0].title.slice(0, 80) : 'no incidents', link: id ? `https://status.cloud.google.com/products/${id}/history` : P.page };
+      });
+      out.status = act.some(x => x.severity === 'major') ? 'outage' : act.some(x => x.severity === 'minor') ? 'degraded' : 'ok';
+      out.summary = act.length ? `${act.length} active incident${act.length > 1 ? 's' : ''}` : 'No active incidents reported';
+    }
+  } catch (e) { out.error = 'Could not read the status feed right now'; out.status = 'unknown'; }
+  return [out, 200];
+}
+async function nvd(env, k) {
+  const key = env?.NVD_API_KEY;
+  const g = async params => {
+    const r = await fetch(`https://services.nvd.nist.gov/rest/json/cves/2.0?${params}`, { headers: key ? { apiKey: key } : {}, signal: AbortSignal.timeout(15000), cf: { cacheTtl: 900, cacheEverything: true } });
+    if (r.status === 403 || r.status === 429) throw new Error('rate');
+    if (!r.ok) throw new Error('nvd ' + r.status);
+    return r.json();
+  };
+  const item = v => { const c = v.cve, m = (c.metrics?.cvssMetricV31 || c.metrics?.cvssMetricV40 || c.metrics?.cvssMetricV30 || [])[0]?.cvssData || {}; return { id: c.id, published: (c.published || '').slice(0, 10), cvss: m.baseScore, severity: m.baseSeverity, kev: !!c.cisaExploitAdd, description: ((c.descriptions || []).find(x => x.lang === 'en')?.value || '').slice(0, 300) }; };
+  const byDate = (a, b) => b.published.localeCompare(a.published);
+  try {
+    if (k) { const d = await g(`keywordSearch=${encodeURIComponent(k)}&resultsPerPage=40`); return [{ mode: 'search', keyword: k, total: d.totalResults, items: (d.vulnerabilities || []).map(item).sort(byDate).slice(0, 20) }, 200]; }
+    const w = `pubStartDate=${new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 23)}&pubEndDate=${new Date().toISOString().slice(0, 23)}`;
+    const sev = x => g(`${w}&cvssV3Severity=${x}&resultsPerPage=${x === 'CRITICAL' ? 40 : 1}`);
+    const [all, kev, crit, high, med, low] = await Promise.all([g('resultsPerPage=1'), g('hasKev&resultsPerPage=1'), sev('CRITICAL'), sev('HIGH'), ...(key ? [sev('MEDIUM'), sev('LOW')] : [])]);
+    return [{ mode: 'dashboard', total: all.totalResults, kev_total: kev.totalResults, window_days: 7, api_key: !!key, counts: { CRITICAL: crit.totalResults, HIGH: high.totalResults, MEDIUM: med?.totalResults, LOW: low?.totalResults }, critical: (crit.vulnerabilities || []).map(item).sort(byDate).slice(0, 12) }, 200];
+  } catch (e) { return [{ error: e.message === 'rate' ? 'NIST NVD is limiting requests right now (free limit: 5 per 30 seconds). Wait a minute and try again, or add a free NVD_API_KEY secret.' : 'NIST NVD is not responding right now. Try again later.' }, 502]; }
+}
+
 export async function onRequestGet({ request, params, env }) {
   const url = new URL(request.url);
   const route = [].concat(params.path || [])[0];
@@ -584,5 +756,25 @@ export async function onRequestGet({ request, params, env }) {
     const [d, st] = await vtx(q, t, env); return json(d, st);
   }
   if (route === 'hdrs') { const [d, st] = await rawHeaders((url.searchParams.get('url') || '').trim()); return json(d, st); }
+  if (route === 'mx') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    return json(await mxInfo(q, { aaaa: true, ptr: 3, hosts: 6 }));
+  }
+  if (route === 'mailhealth') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    const sel = (url.searchParams.get('sel') || '').toLowerCase();
+    if (sel && !/^[a-z0-9._-]{1,63}$/.test(sel)) return json({ error: 'Invalid DKIM selector' }, 400);
+    return json(await mailHealth(q, sel));
+  }
+  if (route === 'dmarc') {
+    if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
+    return json(await dmarcInfo(q));
+  }
+  if (route === 'cloud') { const [d, st] = await cloud(url.searchParams.get('p') || ''); return json(d, st); }
+  if (route === 'nvd') {
+    const k = (url.searchParams.get('k') || '').trim();
+    if (k && !/^[\w .:+\-]{2,80}$/.test(k)) return json({ error: 'Use letters, numbers and spaces only (2 to 80 characters)' }, 400);
+    const [d, st] = await nvd(env, k); return json(d, st);
+  }
   return json({ error: 'Not found' }, 404);
 }
