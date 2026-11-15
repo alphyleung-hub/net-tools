@@ -82,6 +82,16 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 | **MAC Lookup** | Vendor of a MAC address, flags random private MACs | macvendors.com |
 | **Config Generator** 🔒 | Cisco IOS VLAN, MikroTik address-list, Linux nftables | browser |
 
+## 🧰 Everyday conveniences
+
+- **Export any result** as JSON or CSV, with a time stamp (⬇ buttons above every result).
+- **History**: every check is logged with its time (tool: History), exportable as CSV or JSON.
+- **Watchlist for every tool**: press ☆ Watch on any result and re-check it later.
+- **Recent inputs**: the last 20 IPs and domains appear as chips under "Try:", each with a × to remove it.
+- **Paste anything**: full URLs such as `https://www.example.com/page` are accepted; the domain is extracted automatically.
+- **Results stay put** when you switch tools, and the browser Back / Forward buttons move between tools.
+- Recent inputs, history and the watchlist live in your browser only.
+
 ## 🔐 Privacy
 
 - 🔒 tools never send what you type anywhere.
@@ -135,7 +145,7 @@ npx wrangler deploy     # publish to Cloudflare
 
 Investigate can show VirusTotal results for file hashes. Add your free API key as a **secret** (never commit it to Git):
 
-- Dashboard: **Workers & Pages → your Worker → Settings → Variables and Secrets → Add** → type *Secret*, name `VT_API_KEY`
+- Dashboard: **Workers & Pages → your Worker → Settings → Runtime → Variables and secrets** (the section called **Runtime variables and secrets**, on the **Production** tab) **→ Add variable** → type *Secret*, name `VT_API_KEY`. Do **not** use the separate *Build* section called "Variables and secrets": that one is only for build commands and the Worker cannot read it
 - or CLI: `npx wrangler secret put VT_API_KEY`
 
 Open `/api/health` on your site to check: it should show `virustotal_key_found: true`. Without the secret, everything else still works. Free VirusTotal limits: 4 requests/minute, 500/day.
