@@ -5,8 +5,6 @@ const json = (d, s = 200) =>
 const DOMAIN = /^(?=.{1,253}$)([a-z0-9-]{1,63}\.)+[a-z0-9-]{2,63}$/i;
 const IPV4 = /^(\d{1,3}\.){3}\d{1,3}$/;
 const IPV6 = /^[0-9a-f:]+$/i;
-const TYPES = { A: 1, NS: 2, CNAME: 5, SOA: 6, MX: 15, TXT: 16, AAAA: 28, CAA: 257 };
-
 function safeUrl(raw) {
   let u;
   try { u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw); } catch { return null; }
@@ -17,18 +15,20 @@ function safeUrl(raw) {
   return u;
 }
 
-async function dns(q) {
-  const rows = await Promise.all(Object.entries(TYPES).map(async ([t, num]) => {
+const DNS_TYPES = { A: 1, AAAA: 28, CNAME: 5, MX: 15, NS: 2, SOA: 6, TXT: 16, CAA: 257, DS: 43, DNSKEY: 48, HTTPS: 65 };
+async function dns(q, type, res) {
+  const base = res === 'google' ? 'https://dns.google/resolve' : 'https://cloudflare-dns.com/dns-query';
+  const list = type === 'ALL' ? Object.keys(DNS_TYPES) : DNS_TYPES[type] ? [type] : null;
+  if (!list) return [{ error: 'Unknown record type' }, 400];
+  const rows = await Promise.all(list.map(async t => {
     try {
-      const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(q)}&type=${t}`,
-        { headers: { accept: 'application/dns-json' } });
+      const r = await fetch(`${base}?name=${encodeURIComponent(q)}&type=${DNS_TYPES[t]}`, { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(6000) });
       const d = await r.json();
-      return [t, (d.Answer || []).filter(a => a.type === num).map(a => ({ data: a.data, ttl: a.TTL }))];
-    } catch { return [t, []]; }
+      return [t, { rcode: d.Status, records: (d.Answer || []).filter(x => x.type === DNS_TYPES[t]).map(x => ({ data: x.data, ttl: x.TTL })) }];
+    } catch { return [t, { rcode: -1, records: [] }]; }
   }));
-  return Object.fromEntries(rows);
+  return [{ domain: q, resolver: res === 'google' ? 'google' : 'cloudflare', results: Object.fromEntries(rows) }, 200];
 }
-
 const RDAP_FALLBACK = { hk: 'https://rdap.hkirc.hk/' };
 const flat = es => (es || []).flatMap(e => [e, ...flat(e.entities)]);
 function vcard(e) {
@@ -468,6 +468,47 @@ async function vt(q, env) {
     last_analysis: day(a.last_analysis_date), tags: (a.tags || []).slice(0, 8) }, 200];
 }
 
+async function vtx(q, t, env) {
+  if (!vtKey(env)) return [{ error: 'VirusTotal is not set up on this site yet' }, 503];
+  const r = await fetch(`https://www.virustotal.com/api/v3/${{ domain: 'domains', ip: 'ip_addresses', hash: 'files' }[t]}/${encodeURIComponent(q)}`, {
+    headers: { 'x-apikey': vtKey(env), accept: 'application/json' }, signal: AbortSignal.timeout(10000), cf: { cacheTtl: 3600, cacheEverything: true } });
+  if (r.status === 404) return [{ found: false, type: t }, 200];
+  if (r.status === 429) return [{ error: 'VirusTotal free limit reached (4 per minute, 500 per day). Try again soon' }, 429];
+  if (r.status === 401 || r.status === 403) return [{ error: 'VirusTotal rejected the API key' }, 502];
+  if (!r.ok) return [{ error: `VirusTotal error (${r.status})` }, 502];
+  const a = (await r.json()).data?.attributes || {}, st = a.last_analysis_stats || {};
+  const day = x => x ? new Date(x * 1000).toISOString().slice(0, 10) : undefined;
+  const c = a.last_https_certificate;
+  const out = { found: true, type: t, malicious: st.malicious || 0, suspicious: st.suspicious || 0, harmless: st.harmless || 0, undetected: st.undetected || 0,
+    total: (st.malicious || 0) + (st.suspicious || 0) + (st.harmless || 0) + (st.undetected || 0), reputation: a.reputation, last_analysis: day(a.last_analysis_date), tags: (a.tags || []).slice(0, 12),
+    categories: [...new Set(Object.values(a.categories || {}))].slice(0, 12),
+    flagged: Object.entries(a.last_analysis_results || {}).filter(([, v]) => v.category === 'malicious' || v.category === 'suspicious').map(([engine, v]) => ({ engine, category: v.category, result: v.result })).slice(0, 40),
+    cert: c ? { issuer: c.issuer?.O || c.issuer?.CN, subject: c.subject?.CN, valid_from: c.validity?.not_before, valid_to: c.validity?.not_after, sans: (c.extensions?.subject_alternative_name || []).slice(0, 20), sha256: c.thumbprint_sha256 } : undefined };
+  if (t === 'domain') Object.assign(out, { registrar: a.registrar, created: day(a.creation_date), whois_updated: day(a.whois_date), whois: (a.whois || '').slice(0, 3000),
+    dns: (a.last_dns_records || []).slice(0, 30).map(x => ({ type: x.type, value: x.value, ttl: x.ttl })), ranks: Object.entries(a.popularity_ranks || {}).map(([source, v]) => ({ source, rank: v.rank })).slice(0, 8) });
+  if (t === 'ip') Object.assign(out, { asn: a.asn, owner: a.as_owner, country: a.country, network: a.network, rir: a.regional_internet_registry });
+  if (t === 'hash') Object.assign(out, { name: a.meaningful_name, file_type: a.type_description, size: a.size, threat_label: a.popular_threat_classification?.suggested_threat_label, first_seen: day(a.first_submission_date), sha256: a.sha256, sha1: a.sha1, md5: a.md5 });
+  return [out, 200];
+}
+async function rawHeaders(raw) {
+  let url = /^https?:\/\//i.test(raw) ? raw : 'http://' + raw;
+  const hops = [];
+  for (let i = 0; i < 6; i++) {
+    const u = safeUrl(url);
+    if (!u) { if (!hops.length) return [{ error: 'Invalid or blocked URL' }, 400]; hops.push({ url, error: 'Redirect to a blocked or invalid address was not followed' }); break; }
+    const t0 = Date.now();
+    let r;
+    try { r = await fetch(u.href, { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { 'user-agent': 'NetTools-HeaderView/1.0', accept: '*/*' } }); }
+    catch { hops.push({ url: u.href, error: 'Could not connect to this address' }); break; }
+    const sc = r.headers.getSetCookie?.() || [];
+    hops.push({ url: u.href, status: r.status, statusText: r.statusText, ms: Date.now() - t0,
+      headers: [...r.headers.entries()].filter(([k]) => k !== 'set-cookie').concat(sc.map(v => ['set-cookie', v])).map(([k, v]) => [k, String(v).slice(0, 600)]) });
+    const loc = r.headers.get('location');
+    if (r.status >= 300 && r.status < 400 && loc) { try { url = new URL(loc, u.href).href; } catch { break; } } else break;
+  }
+  return [{ hops }, 200];
+}
+
 export async function onRequestGet({ request, params, env }) {
   const url = new URL(request.url);
   const route = [].concat(params.path || [])[0];
@@ -483,7 +524,8 @@ export async function onRequestGet({ request, params, env }) {
   }
   if (route === 'dns') {
     if (!DOMAIN.test(q)) return json({ error: 'Enter a valid domain' }, 400);
-    return json(await dns(q));
+    const [d, st] = await dns(q, (url.searchParams.get('t') || 'ALL').toUpperCase(), (url.searchParams.get('r') || 'cloudflare').toLowerCase());
+    return json(d, st);
   }
   if (route === 'whois') { const [d, s] = await whois(q); return json(d, s); }
   if (route === 'status') {
@@ -533,5 +575,14 @@ export async function onRequestGet({ request, params, env }) {
     if (sfs && sfs !== 'same-origin') return json({ error: 'Not allowed' }, 403);
     const [d, st] = await vt(q, env); return json(d, st);
   }
+  if (route === 'vtx') {
+    const sfs = request.headers.get('sec-fetch-site');
+    if (sfs && sfs !== 'same-origin') return json({ error: 'Not allowed' }, 403);
+    const t = url.searchParams.get('t');
+    const ok = t === 'domain' ? DOMAIN.test(q) : t === 'ip' ? (IPV4.test(q) || (q.includes(':') && IPV6.test(q))) : t === 'hash' ? /^([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i.test(q) : false;
+    if (!ok) return json({ error: 'Enter a domain, IP address or file hash' }, 400);
+    const [d, st] = await vtx(q, t, env); return json(d, st);
+  }
+  if (route === 'hdrs') { const [d, st] = await rawHeaders((url.searchParams.get('url') || '').trim()); return json(d, st); }
   return json({ error: 'Not found' }, 404);
 }

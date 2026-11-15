@@ -69,6 +69,11 @@ select,.kv input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-r
 .srcs{max-width:960px;margin:0 auto 12px;text-align:left}.srcs summary{cursor:pointer;color:var(--ac);text-align:center}
 .srcs table{margin-top:8px;font-size:13px}.srcs p{margin:8px 0}
 .pill.mx{color:#3b82f6}
+form select{width:auto;flex:none;margin:0;padding:8px 10px}
+.hdrt{border:1px solid var(--bd)}.hdrt td{padding:11px 14px;border:1px solid var(--bd)}.hdrt td:first-child{background:var(--acs);width:34%;color:var(--fg);font-size:14px}
+.card h3.big{font-size:19px;text-transform:none;letter-spacing:0;color:var(--fg);word-break:break-all}
+.gem{background:var(--acs);border-color:var(--ac);color:var(--ac);font-weight:600;padding:5px 14px;margin-right:8px}
+.lk{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.lk .card{margin:0;display:flex;flex-direction:column;gap:8px}.lk p{margin:0;font-size:14px;color:var(--mut);flex:1}
 .abar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:13px}.abar .grow{flex:1}.abar button{padding:4px 12px;font-size:13px}
 .rc{display:inline-flex;align-items:center;margin:0 0 6px 6px;border:1px solid var(--bd);border-radius:999px;background:var(--card)}
 .rc button{border:0;background:none;padding:2px 4px 2px 10px;font-size:13px}.rc .x{padding:2px 9px 2px 2px;color:var(--mut)}.rc .x:hover{color:var(--bad)}
@@ -88,7 +93,7 @@ footer{text-align:center;color:var(--mut);font-size:12.5px;padding:0 16px 30px}
 <main>
  <h2 id="ttl"></h2><p class="sub" id="sub"></p>
  <div class="help" id="help"></div>
- <form id="f"><input id="q" autocomplete="off" spellcheck="false"><button>Check</button></form>
+ <form id="f"><input id="q" autocomplete="off" spellcheck="false"><select id="o1" hidden></select><select id="o2" hidden></select><button>Check</button></form>
  <div class="ex" id="hint" hidden>Tip: you can paste a full address like https://www.example.com/page and the domain is used automatically.</div>
  <div class="ex" id="ex"></div>
  <div class="abar" id="abar" hidden><span id="ats" class="mut"></span><span class="grow"></span><button id="ew">☆ Watch</button><button id="ej">⬇ JSON</button><button id="ec">⬇ CSV</button></div>
@@ -229,8 +234,8 @@ function normHost(s){s=refang(String(s).trim());if(!s||/^[0-9a-f.:]+\/\d{1,3}$/i
  if(/^[a-z0-9.-]+:\d{1,5}$/i.test(s))return s.replace(/:\d+$/,'').replace(/\.$/,'');
  return s.replace(/\.$/,'')}
 const HOSTN=new Set(['map','dns','whois','dnssec','ssl','ping','mtr','score','claude','bgp']),FIRSTN=new Set(['prop','mail']),
- RECT=new Set(['map','dns','whois','prop','dnssec','ssl','ping','mtr','mail','score','claude','hdr','status','inv','bgp']),NOBAR=new Set(['watch','hist','pwn']);
-const norm=(id,v)=>{v=v.trim();if(HOSTN.has(id))return normHost(v);if(FIRSTN.has(id)){const[a,...r]=v.split(/\s+/);return[normHost(a||''),...r].join(' ').trim()}return v};
+ RECT=new Set(['vt','map','dns','whois','prop','dnssec','ssl','ping','mtr','mail','score','claude','hdr','status','inv','bgp']),NOBAR=new Set(['watch','hist','pwn']);
+const norm=(id,v)=>{v=v.trim();if(id==='vt')return HASH.test(v)?v:normHost(v);if(HOSTN.has(id))return normHost(v);if(FIRSTN.has(id)){const[a,...r]=v.split(/\s+/);return[normHost(a||''),...r].join(' ').trim()}return v};
 const ts2=d=>d.toLocaleString(undefined,{hour12:false})+' ('+d.toISOString().slice(0,19).replace('T',' ')+' UTC)';
 function sections(root){return[...root.children].flatMap(c=>c.classList.contains('grid2')?[...c.children]:[c]).filter(c=>c.classList.contains('card')).map(c=>{
  const cl=c.cloneNode(true);cl.querySelectorAll('svg,details,button').forEach(x=>x.remove());
@@ -240,7 +245,7 @@ function sections(root){return[...root.children].flatMap(c=>c.classList.contains
  const lines=[...cl.querySelectorAll('.cfg')].flatMap(x=>x.textContent.split('\n')).filter(Boolean);
  if(f.length)o.fields=Object.fromEntries(f);if(rows.length)o.rows=rows;if(lines.length)o.lines=lines;
  const t=cl.textContent.replace(title,'').replace(/\s+/g,' ').trim();if(!f.length&&!rows.length&&!lines.length&&t)o.text=t;return o})}
-function exportObj(S,ts){return{tool:T[cur].label,tool_id:cur,input:S.chk||'',checked_at_utc:ts.toISOString(),checked_at_local:ts.toLocaleString(undefined,{hour12:false}),site:location.origin,sections:sections(out),raw:S.raw||[]}}
+function exportObj(S,ts){return{tool:T[cur].label,tool_id:cur,input:(S.chk||'')+(S.optTxt?' ('+S.optTxt+')':''),checked_at_utc:ts.toISOString(),checked_at_local:ts.toLocaleString(undefined,{hour12:false}),site:location.origin,sections:sections(out),raw:S.raw||[]}}
 function toCSV(o){const base=[o.checked_at_utc,o.tool,o.input],rows=[['Checked at (UTC)','Tool','Input','Section','Field','Value']];
  o.sections.forEach(s=>{if(s.fields)Object.entries(s.fields).forEach(([k,v])=>rows.push([...base,s.title,k,v]));(s.rows||[]).forEach((r,i)=>rows.push([...base,s.title,'row '+(i+1),r.join(' | ')]));(s.lines||[]).forEach((l,i)=>rows.push([...base,s.title,'line '+(i+1),l]));if(s.text)rows.push([...base,s.title,'text',s.text])});
  return csv(rows)}
@@ -260,7 +265,7 @@ const LOCAL=['dec','ioc','hash','jwt','subnet','range','bw','gen','watch','hist'
 const SRC={ip:'Cloudflare (your connection data, read by this site) and the Cloudflare trace endpoint',
  claude:'ipapi.is for IP quality, Anthropic supported regions policy (list built in), and your browser for reachability, WebRTC and device info',
  score:'ipapi.is (IP type and risk flags)',split:'public IP-echo sites (ipify, icanhazip, ifconfig.me, ipwho.is, ipapi.co, ipinfo.io, ip.sb, Cloudflare, httpbin), called from your browser',
- webrtc:'your browser and a Google STUN server',map:'certificate logs (crt.sh, Certspotter as backup), Cloudflare DNS, ipapi.is',dns:'Cloudflare DNS over HTTPS',
+ webrtc:'your browser and a Google STUN server',map:'certificate logs (crt.sh, Certspotter as backup), Cloudflare DNS, ipapi.is',dns:'Cloudflare or Google DNS over HTTPS (you choose the resolver)',hdrs:'this site server requests the URL and shows the raw response headers, following redirects one step at a time',vt:'VirusTotal API (needs the VT_API_KEY secret)',links:'external websites (links only: nothing is sent until you open one)',
  whois:'RDAP registries (found through the IANA list; ARIN for IP addresses), with the registry WHOIS text as a fallback (for example .com.hk)',prop:'Cloudflare, Google, Quad9 and OpenDNS (DNS over HTTPS)',dnssec:'Google Public DNS (DS, DNSKEY and RRSIG records); the DS-to-key check is calculated by this site',
  ssl:'certificate transparency logs (crt.sh) plus a live HTTPS check made by this site server',ping:'Globalping.io probes around the world',status:'this site server visits the URL you enter',mtr:'Globalping.io (MTR from 3 probe locations worldwide)',
  asn:'RIPEstat',bgp:'RIPEstat (RIPE RIS route collectors)',oui:'macvendors.com',
@@ -272,6 +277,31 @@ const stx=s=>ST[String(s).toLowerCase().replace(/[^a-z]/g,'')]||'';
 const raw=(t,o)=>`<details><summary class="mut" style="cursor:pointer">${esc(t)}</summary><div class="cfg" style="margin-top:8px">${esc(typeof o==='string'?o:JSON.stringify(o,null,2))}</div></details>`;
 const CA=[[/let.?s encrypt|isrg/i,"Let's Encrypt is a free, automated certificate authority. Its certificates last 90 days and renew automatically."],[/google trust|gts/i,'Google Trust Services issues free certificates, for example for sites behind Google Cloud and Cloudflare.'],[/digicert/i,'DigiCert is one of the largest commercial certificate authorities.'],[/sectigo|comodo/i,'Sectigo (formerly Comodo) is a large commercial certificate authority.'],[/amazon/i,'Amazon issues certificates through AWS Certificate Manager.'],[/cloudflare/i,'Cloudflare issues certificates for sites that use its proxy.'],[/globalsign/i,'GlobalSign is a commercial certificate authority.'],[/zerossl/i,'ZeroSSL offers free and paid certificates.']];
 const KEYADV=a=>[5,7].includes(a)?['warn','uses an outdated SHA-1 based algorithm']:[13,14,15,16].includes(a)?['ok','modern algorithm']:[8,10].includes(a)?['ok','accepted algorithm']:['mut','unknown algorithm'];
+const DNSDOC={A:['A','IPv4 address','Points the name to an IPv4 address (like 93.184.216.34). This is where browsers connect to reach the website.'],
+ AAAA:['AAAA','IPv6 address','Same as A, but for the newer IPv6 address format.'],
+ CNAME:['CNAME','Alias','Says this name is an alias of another name, and the other name records are used instead. A CNAME cannot sit at the root of a domain.'],
+ MX:['MX','Mail servers','Where email for the domain is delivered. The number is the priority: the lowest number is tried first.'],
+ NS:['NS','Name servers','The servers that hold the official DNS records for this domain.'],
+ SOA:['SOA','Start of authority','Admin details for the zone: primary name server, admin email, version (serial) and refresh timers.'],
+ TXT:['TXT','Text notes','Free text used for email security (SPF, DKIM, DMARC), proving domain ownership and other settings.'],
+ CAA:['CAA','Certificate authority rules','Lists which certificate authorities may issue HTTPS certificates for the domain.'],
+ DS:['DS','DNSSEC delegation','A fingerprint of the domain DNSSEC key, stored in the parent zone.'],
+ DNSKEY:['DNSKEY','DNSSEC public key','The public keys used to check DNSSEC signatures.'],
+ HTTPS:['HTTPS','HTTPS service binding','Tells browsers how to connect over HTTPS (for example HTTP/3 and IP hints) so connections start faster.']};
+const hms=s=>s>=86400?(s/86400|0)+'d':s>=3600?(s/3600|0)+'h':s>=60?(s/60|0)+'m':s+'s';
+function dnsMean(t,d){const s=String(d);
+ if(t==='MX'){const[p,...x]=s.split(' ');return 'Priority '+p+': mail goes to '+x.join(' ').replace(/\.$/,'')+' (lowest is tried first)'}
+ if(t==='SOA'){const p=s.split(' ');return 'Primary server '+p[0].replace(/\.$/,'')+', admin '+(p[1]||'').replace(/\.$/,'').replace('.','@')+', serial '+p[2]+', refresh '+hms(+p[3])+', retry '+hms(+p[4])+', expire '+hms(+p[5])+', minimum TTL '+hms(+p[6])}
+ if(t==='TXT'){const x=s.replace(/^"|"$/g,'');return /^v=spf1/i.test(x)?'SPF: which servers may send email for this domain':/^v=DMARC1/i.test(x)?'DMARC: what to do with email that fails checks':/^v=DKIM1/i.test(x)?'DKIM public key':/verification|^ms=/i.test(x)?'Proves the owner controls this domain (verification token)':'Text note'}
+ if(t==='CAA'){const m=/^\d+ (\w+) /.exec(s);return m?({issue:'Allows this authority to issue certificates',issuewild:'Allows this authority to issue wildcard certificates',iodef:'Where to report certificate problems'}[m[1]]||'CAA rule'):'CAA rule'}
+ return {NS:'Authoritative name server for this domain',CNAME:'Alias: uses the records of '+s.replace(/\.$/,''),A:'IPv4 address that visitors connect to',AAAA:'IPv6 address that visitors connect to',DS:'Fingerprint of a DNSSEC key (stored in the parent zone)',DNSKEY:/^257/.test(s)?'DNSSEC key-signing key (KSK)':'DNSSEC zone-signing key (ZSK)',HTTPS:'Tells browsers how to connect over HTTPS'}[t]||''}
+const bigCard=(t,b)=>`<div class="card"><h3 class="big">${esc(t)}</h3>${b}</div>`;
+const capH=n=>n.replace(/(^|-)([a-z])/g,(m,a,b)=>a+b.toUpperCase());
+const stc=s=>s>=200&&s<300?'ok':s>=300&&s<400?'warn':'bad';
+const VTMSG='The Worker cannot see a VirusTotal key. Open /api/health: it must say virustotal_key_found true. If false, check the secret is named VT_API_KEY under Settings, Runtime, Variables and secrets (Production), and that the latest code is deployed.';
+function askGemini(){const t=T[cur],txt=`I am using the "${t.label}" tool in a free online network and security toolbox. What it does: ${t.sub} ${t.help.replace(/<[^>]+>/g,'')}\n\nPlease explain in simple words: 1) what this tool is for and when to use it, 2) how to read its results (what is normal and what is a warning), 3) a short real-world example, and 4) its limits and common mistakes.`;
+ const done=()=>{$('#gemn').textContent='Question copied. Paste it into Gemini (Ctrl+V).'},fail=()=>window.prompt('Copy this question and paste it into Gemini:',txt);
+ window.open('https://gemini.google.com/app','_blank','noopener');try{navigator.clipboard.writeText(txt).then(done,fail)}catch{fail()}}
 const CATS={me:['🏠','Connection','See your IP address, location and how websites and Claude see your connection.'],
  dom:['🌍','Domain & DNS','Look up the records, certificates, owner and hidden sub-sites of any domain.'],
  net:['📡','Network','Test speed and routes, check website status and explore networks and BGP routing.'],
@@ -324,10 +354,15 @@ const T={
     +`<div class="grid2">${card('Hosting / networks',bars(nets))}${card('Server locations',bars(ctry))}</div>`
     +card('Relationship graph',graph(d.domain,d.hosts,mx,info,ips))
     +card('Hosts',`<p class="mut">${esc(note)}</p><table>${tr}</table>`)}},
- dns:{cat:'dom',i:'📖',label:'DNS',title:'DNS records',sub:'The internet phonebook entries for a domain.',ph:'example.com',ex:['google.com','github.com'],
-  help:'DNS turns a name like google.com into numbers computers use. <b>A</b> = IPv4 address, <b>AAAA</b> = IPv6 address, <b>MX</b> = mail servers, <b>NS</b> = who manages the name, <b>TXT</b> = notes (often email security), <b>CNAME</b> = alias, <b>SOA</b> = admin info, <b>CAA</b> = who may issue its security certificates.',
-  async run(v){const d=await api('dns',{q:v});
-   return Object.entries(d).map(([t,rows])=>card(t,rows.length?'<table>'+rows.map(r=>`<tr><td class="mut" style="width:1%;white-space:nowrap">${esc(r.ttl)}s</td><td>${esc(r.data)}</td></tr>`).join('')+'</table>':'<span class="mut">No records</span>')).join('')}},
+ dns:{cat:'dom',i:'📖',label:'DNS',title:'All DNS records of a domain',sub:'Every common record type for a domain, from the resolver you choose, with a plain explanation of each.',ph:'example.com (you can paste a full URL)',ex:['hkelectric.com','google.com','github.com'],
+  opts:[[['cloudflare','Resolver: Cloudflare'],['google','Resolver: Google']],[['ALL','All record types'],['A','A'],['AAAA','AAAA'],['CNAME','CNAME'],['MX','MX'],['NS','NS'],['SOA','SOA'],['TXT','TXT'],['CAA','CAA'],['DS','DS'],['DNSKEY','DNSKEY'],['HTTPS','HTTPS']]],
+  help:'DNS is the internet phonebook: it turns a name into the numbers and settings computers need. Pick a <b>resolver</b> (the DNS server we ask) and a <b>record type</b>, or leave <b>All</b> to see everything. Under each type you get a short explanation of what it is, and each record has a plain-language meaning. Different resolvers can briefly show different answers while a change is spreading.',
+  async run(v,ov){const[res,type]=ov&&ov[0]?ov:['cloudflare','ALL'];const d=await api('dns',{q:v,t:type,r:res});
+   const E=Object.entries(d.results),tot=E.reduce((n,[,x])=>n+x.records.length,0),have=E.filter(([,x])=>x.records.length),none=E.filter(([,x])=>!x.records.length).map(([k])=>k),nx=E.length>0&&E.every(([,x])=>x.rcode===3);
+   const sum=card('Summary',kv({domain:d.domain,resolver:d.resolver==='google'?'Google Public DNS (8.8.8.8)':'Cloudflare (1.1.1.1)',records_found:tot,record_types_found:have.map(([k])=>k).join(', ')||'none'})+(nx?'<p><b class="bad">This domain does not exist (NXDOMAIN).</b></p>':!tot?'<p class="mut">No records of the selected type.</p>':''));
+   const cards=have.map(([t,x])=>{const D=DNSDOC[t];return card(D[0]+' record: '+D[1],`<p class="mut">${esc(D[2])}</p><table><tr class="mut"><td>TTL</td><td>Value</td><td>What it means</td></tr>${x.records.map(r=>`<tr><td class="mut" style="white-space:nowrap">${hms(r.ttl)}</td><td>${esc(cut(r.data,220))}</td><td class="mut">${esc(dnsMean(t,r.data))}</td></tr>`).join('')}</table>`)}).join('');
+   return sum+cards+(none.length&&type==='ALL'?card('Types with no records',`<p class="mut">${none.map(t=>esc(t)+' ('+esc(DNSDOC[t][1].toLowerCase())+')').join(', ')}</p>`):'')
+    +card('What is TTL?','<p class="mut">TTL (time to live) is how long, in seconds, resolvers may keep a record before asking again. 300s means 5 minutes, 1h means 1 hour. Lower it before a planned change so the change spreads faster.</p>')}},
  whois:{cat:'dom',i:'🔎',label:'Whois',title:'Whois lookup',sub:'Who owns a domain or an IP address, when it expires and who to contact.',ph:'example.com, example.com.hk or 8.8.8.8',ex:['google.com','example.com.hk','8.8.8.8'],
   help:'Shows the <b>registrar</b> (the company the domain was bought from), <b>status locks</b>, <b>dates</b> (registered, expires, age), <b>name servers</b> and any published <b>contacts</b>. Type an <b>IP address</b> to see who owns that block of addresses. Personal details are usually hidden for privacy. Works for most endings including <b>.com.hk</b>: if a registry has no RDAP service, we fall back to its classic WHOIS text.',
   async run(v){const d=await api('whois',{q:v});
@@ -429,6 +464,11 @@ const T={
   async run(v){const d=await api('mtr',{q:v});
    return d.probes.map(p=>{const rows=p.hops.map(h=>`<tr><td class="mut">${h.hop}</td><td>${esc(h.host)}${h.asn?` <span class="mut">AS${esc(h.asn)}</span>`:''}</td><td class="${h.loss==null?'mut':h.loss>=20?'bad':h.loss>0?'warn':'ok'}">${h.loss!=null?h.loss+'%':''}</td><td class="mut">${h.sent??''}</td><td>${h.last??''}</td><td class="${tl(h.avg,80,200)}"><b>${h.avg??''}</b></td><td>${h.best??''}</td><td>${h.worst??''}</td><td class="mut">${h.stdev??''}</td></tr>`).join('');
     return card('From '+([p.city,p.country].filter(Boolean).join(', ')||'unknown')+(p.network?' ('+p.network+')':''),p.hops.length?`<table><tr class="mut"><td>#</td><td>Host</td><td>Loss</td><td>Sent</td><td>Last</td><td>Avg</td><td>Best</td><td>Worst</td><td>StDev</td></tr>${rows}</table>`:'<span class="mut">No data from this probe.</span>')}).join('')}},
+ hdrs:{cat:'net',i:'📄',label:'Server Headers',title:'Server header details',sub:'The raw HTTP response headers a server sends, one step at a time through redirects.',ph:'http://www.example.com (or any URL)',ex:['http://www.example.com','github.com'],
+  help:'Every website answers with a <b>status line</b> and <b>headers</b> before the page itself. Here you see them exactly as sent: <b>Server</b> (the web server software), <b>Location</b> (where a redirect goes), <b>Cache-Control</b>, <b>Set-Cookie</b> and more. We stop at each redirect and show it, so you can follow a chain like <b>http to https to www</b>. Type a name without http and we start with plain http, so you can see the redirect.',
+  async run(v){const d=await api('hdrs',{url:v}),H=d.hops;
+   const chain=H.length>1?card('Redirect chain',`<table>${H.map((h,i)=>`<tr><td class="mut">${i+1}</td><td>${esc(cut(h.url,70))}</td><td>${h.error?pill('bad','error'):pill(stc(h.status),h.status)}</td></tr>`).join('')}</table>`+(H[0].url.startsWith('http://')&&H[1]&&H[1].url.startsWith('https://')?'<p>'+pill('ok','HTTP redirects to HTTPS')+'</p>':'')):'';
+   return chain+H.map(h=>bigCard('Server header details for '+h.url,h.error?`<b class="bad">${esc(h.error)}</b>`:`<table class="hdrt"><tr><td>Header</td><td>${pill(stc(h.status),esc(h.status+' '+(h.statusText||'')))} <span class="mut">${h.ms} ms</span></td></tr>${h.headers.map(([k,x])=>`<tr><td>${esc(capH(k))}</td><td>${esc(x)}</td></tr>`).join('')}</table>`)).join('')}},
  asn:{cat:'net',i:'🏢',label:'ASN Prefixes',title:'ASN prefix lookup',sub:'Every IP range a network announces to the internet.',ph:'AS13335',ex:['AS13335','AS15169'],
   help:'An <b>ASN</b> is the ID of a network (for example AS13335 is Cloudflare). This lists the IPv4 and IPv6 <b>prefixes</b> that network announces. Data from RIPEstat. Up to 300 of each are shown.',
   async run(v){const d=await api('asn',{q:v});
@@ -461,6 +501,19 @@ const T={
     $('#gout').innerHTML=card('Generated config',`<div class="cfg" id="cfgout">${esc(g.fn(v))}</div><button id="cpg">Copy</button>`)};
    const r=()=>{const g=GEN[$('#g0').value];$('#gf').innerHTML=g.f.map(([k,l,d])=>`<label>${esc(l)}<input data-k="${k}" value="${esc(d)}"></label>`).join('');u()};
    $('#g0').onchange=r;$('#gf').oninput=u;r()}},
+ links:{cat:'tool',i:'🔗',label:'More Tools',title:'More tools and links',sub:'Handy online tools from other websites, opened in a new tab.',
+  help:'These are <b>other websites</b>, not part of this site. Type a host below to open the Check-Host pages with it already filled in. Only use terminals and port checks on systems you own or are allowed to test.',
+  run:()=>{const L=(n,u,d,ch)=>`<div class="card"><h3 class="big">${esc(n)}</h3><p>${d}</p><div><a class="lnk" href="${esc(u)}" target="_blank" rel="noopener noreferrer"${ch?` data-ch="${esc(ch)}"`:''}>Open ↗</a></div></div>`;
+   return `<div class="card"><label>Host to check (optional, used for the Check-Host buttons)<input id="lk" autocomplete="off" placeholder="example.com" style="width:100%;padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg);font:inherit;margin-top:2px"></label></div>
+<div class="lk">${L('Check-Host: live terminal','https://check-host.net/terminal','A free Linux or Windows terminal in your browser (15-minute sessions). Use ping, mtr, traceroute, curl, dig, nslookup, whois, telnet and more.')}
+${L('Check-Host: ping','https://check-host.net/check-ping','Ping a host from servers in many countries at once.','check-ping')}
+${L('Check-Host: HTTP','https://check-host.net/check-http','Check a website response from many locations.','check-http')}
+${L('Check-Host: TCP port','https://check-host.net/check-tcp','Test if a TCP port is open from many locations.','check-tcp')}
+${L('Check-Host: DNS','https://check-host.net/check-dns','Look up DNS records from different countries.','check-dns')}
+${L('VirtualBytes tools','https://tools.virtualbytes.io/','A collection of online network tools by VirtualBytes.')}
+${L('DNSChecker','https://dnschecker.org/','DNS records and global DNS propagation checks.')}
+${L('VirusTotal','https://www.virustotal.com/','Scan files, domains, IPs and URLs with about 70 security engines.')}</div>`},
+  after(){const u=()=>{const h=encodeURIComponent(normHost($('#lk').value));document.querySelectorAll('[data-ch]').forEach(a=>{a.href='https://check-host.net/'+a.dataset.ch+(h?'?host='+h:'')})};$('#lk').oninput=u}},
  hist:{cat:'tool',i:'🕘',label:'History',title:'Check history',sub:'Every check you ran, with its time. Saved only in this browser.',
   help:'Each time you run a check, the tool, what you typed and the time are logged here (last 200). Click <b>Check again</b> to repeat one, or export the whole log as <b>CSV</b> or <b>JSON</b>. The log stays <b>in this browser only</b> and disappears if you clear your browser data. Every result also has its own <b>⬇ JSON</b> and <b>⬇ CSV</b> buttons.',
   run:()=>{const a=hist.get();return card('Checks ('+a.length+')',a.length?`<table><tr class="mut"><td>Time</td><td>Tool</td><td>Input</td><td></td></tr>${a.slice(0,100).map(x=>`<tr><td class="mut" style="white-space:nowrap">${esc(new Date(x.t).toLocaleString(undefined,{hour12:false}))}</td><td>${esc((T[x.tool]?.i||'')+' '+(T[x.tool]?.label||x.tool))}</td><td>${esc(cut(x.input,50))}</td><td><button data-w="run" data-tool="${esc(x.tool)}" data-v="${esc(x.input)}">Check again</button></td></tr>`).join('')}</table><p><button data-w="hcsv">Export CSV</button> <button data-w="hjson">Export JSON</button> <button data-w="hclr">Clear history</button></p>`:'<span class="mut">No checks yet. Run any tool and it will appear here.</span>')}},
@@ -494,6 +547,24 @@ const T={
   help:'Save anything you want to track: IPs, domains, URLs, hashes, ASNs, CVEs. Press the <b>☆ Watch</b> button above the results of <b>any tool</b>, and the item is saved together with that tool, so <b>Check</b> re-runs it in the right place. The list is stored <b>in this browser only</b> (local storage): it is not uploaded, and it disappears if you clear your browser data. Use <b>Export CSV</b> to keep a backup. Indicators are shown defanged so you cannot click them by accident.',
   run:()=>`<div class="card"><label>Add indicators (one per line, defanged is fine)<textarea id="w1" rows="3"></textarea></label><div class="acts" style="justify-content:flex-start;margin-top:12px"><button id="w2" style="background:var(--ac);color:#fff;border-color:var(--ac)">Add to watchlist</button></div></div><div id="wl"></div>`,
   after(){$('#w2').onclick=()=>{$('#w1').value.split('\n').forEach(l=>wl.add(l));$('#w1').value='';drawWatch()};drawWatch()}},
+ vt:{cat:'sec',i:'🦠',label:'VirusTotal',title:'VirusTotal lookup',sub:'Reputation of a domain, IP address or file hash: detections, categories, DNS, certificate and WHOIS.',ph:'domain, IP address or file hash (a full URL is fine)',ex:['portal.payme.hsbc.com.hk','example.com','8.8.8.8'],
+  help:'<b>VirusTotal</b> asks about 70 security engines whether a domain, IP or file is harmful. The big number is <b>engines that flag it / engines that checked it</b>: 0 is good, a few flags can be false alarms, many flags is a strong warning. You also see <b>categories</b>, the DNS records VirusTotal last saw, <b>popularity rank</b>, the <b>HTTPS certificate</b> and the <b>WHOIS</b> text. Needs the VT_API_KEY secret (free: 4 lookups a minute, 500 a day).',
+  async run(v){const x=refang(v.trim()),c=HASH.test(x)?{t:'hash',host:x}:ioctype(x);if(!c)throw new Error('Enter a domain, IP address or file hash');
+   const t=c.t,q=c.host,d=await api('vtx',{q,t}).catch(e=>{throw new Error(/not set up/i.test(e.message)?VTMSG:e.message)});
+   const path={domain:'domain',ip:'ip-address',hash:'file'}[t],link=lnks([['Open on VirusTotal','https://www.virustotal.com/gui/'+path+'/'+encodeURIComponent(q)+(t==='domain'?'/details':'')]]);
+   if(!d.found)return card('Result',`<span class="mut">VirusTotal has no record of this ${t==='hash'?'file':t==='ip'?'IP address':'domain'}.</span>`)+card('Open it',link);
+   const col=d.malicious>3?'bad':d.malicious>0?'warn':'ok',rp=d.reputation;
+   let body=card('Detections',`<div class="score ${col}">${d.malicious}<small> / ${d.total} engines flag it as malicious</small></div><p class="mut">${d.suspicious} suspicious, ${d.harmless} harmless, ${d.undetected} undetected. Last analysed ${esc(d.last_analysis||'n/a')}.</p>`+(rp!=null?`<p>${pill(rp<0?'bad':rp>0?'ok':'mut','Community score '+rp)}</p>`:'')+(d.tags.length?`<p>${d.tags.map(x=>pill('mut',esc(x))).join(' ')}</p>`:''));
+   if(d.categories.length)body+=card('Categories',`<p>${d.categories.map(x=>pill('mx',esc(x))).join(' ')}</p>`);
+   if(d.flagged.length)body+=card('Engines that flagged it ('+d.flagged.length+')',`<table>${d.flagged.map(x=>`<tr><td>${esc(x.engine)}</td><td>${pill(x.category==='malicious'?'bad':'warn',esc(x.category))}</td><td class="mut">${esc(x.result||'')}</td></tr>`).join('')}</table>`);
+   if(t==='domain'){body+=card('Registration',kv({registrar:d.registrar,created:d.created,whois_updated:d.whois_updated}));
+    if(d.dns.length)body+=card('Last DNS records seen',`<table><tr class="mut"><td>Type</td><td>Value</td><td>TTL</td></tr>${d.dns.map(x=>`<tr><td>${esc(x.type)}</td><td>${esc(cut(String(x.value??''),90))}</td><td class="mut">${x.ttl!=null?hms(x.ttl):''}</td></tr>`).join('')}</table>`);
+    if(d.ranks.length)body+=card('Popularity ranks',`<table>${d.ranks.map(x=>`<tr><td>${esc(x.source)}</td><td>#${esc(x.rank)}</td></tr>`).join('')}</table>`)}
+   if(t==='ip')body+=card('Network',kv({asn:d.asn?'AS'+d.asn:undefined,owner:d.owner,country:d.country,network:d.network,registry:d.rir}));
+   if(t==='hash')body+=card('File',kv({name:d.name,file_type:d.file_type,size:d.size,threat_label:d.threat_label,first_seen:d.first_seen,sha256:d.sha256,sha1:d.sha1,md5:d.md5}));
+   if(d.cert)body+=card('Last HTTPS certificate',kv({subject:d.cert.subject,issuer:d.cert.issuer,valid_from:d.cert.valid_from,valid_to:d.cert.valid_to,sha256:d.cert.sha256})+(d.cert.sans.length?`<div class="cfg" style="margin-top:10px">${esc(d.cert.sans.join('\n'))}</div>`:''));
+   if(d.whois)body+=card('WHOIS',raw('Show WHOIS text',d.whois));
+   return body+card('More on VirusTotal',link)}},
  mail:{cat:'sec',i:'✉️',label:'Email Security',title:'Email security check',sub:'SPF, DKIM and DMARC: can someone spoof this domain?',ph:'example.com (optional DKIM selector: example.com selector1)',ex:['google.com','github.com'],
   help:'These three DNS records stop others from sending fake email as your domain. <b>SPF</b> lists allowed mail servers, <b>DMARC</b> says what to do with fakes (<b>reject</b> is strongest, <b>none</b> only monitors), and <b>DKIM</b> signs messages. DKIM needs a <b>selector</b> name (find it in an email header, e.g. selector1 or google).',
   async run(v){const[q,sel]=v.trim().split(/\s+/),d=await api('mailsec',sel?{q,sel}:{q});
@@ -548,7 +619,7 @@ function snapVals(){const v={};out.querySelectorAll('input,select,textarea').for
 function applyVals(v){const set=(e,x)=>{if(e.type==='checkbox')e.checked=x;else e.value=x;['input','change'].forEach(n=>e.dispatchEvent(new Event(n,{bubbles:true})))};
  out.querySelectorAll('[id]').forEach(e=>{if(e.id in v&&/^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName))set(e,v[e.id])});
  out.querySelectorAll('[data-k]').forEach(e=>{if('k:'+e.dataset.k in v)set(e,v['k:'+e.dataset.k])})}
-function snap(){if(!cur)return;const t=T[cur],S=STATE[cur]=STATE[cur]||{};S.REP=REP;S.REPN=REPN;S.LAST=LAST;if(t.ph)S.val=q.value;else{S.vals=snapVals();S.keep=$('#io')?.innerHTML}}
+function snap(){if(!cur)return;const t=T[cur],S=STATE[cur]=STATE[cur]||{};S.REP=REP;S.REPN=REPN;S.LAST=LAST;if(t.ph){S.val=q.value;if(t.opts)S.opt=['o1','o2'].map(k=>$('#'+k).value)}else{S.vals=snapVals();S.keep=$('#io')?.innerHTML}}
 function showBar(){const S=STATE[cur]||{},t=T[cur],on=!NOBAR.has(cur)&&!S.busy&&S.ok!==false&&!!out.querySelector('.card:not(.mut)');
  abar.hidden=!on;if(!on)return;
  $('#ats').textContent=S.ts?'🕒 Checked '+ts2(S.ts):'🕒 Live result (the time is added when you export)';$('#ew').hidden=!(t.ph&&S.chk)}
@@ -561,7 +632,8 @@ async function go(){const id=cur,t=T[id],S=STATE[id]=STATE[id]||{},val=norm(id,q
  S.busy=true;S.ok=undefined;abar.hidden=true;
  out.innerHTML='<div class="card mut"><span class="sp"></span>Checking…</div>';
  const run=RUN={list:[]};let html,ok=true;
- try{html=await t.run(val)}catch(e){ok=false;html=card('Error',`<b class="bad">${esc(e.message)}</b>`)}
+ const ov=['o1','o2'].map((k,i)=>t.opts?.[i]?$('#'+k).value:'');if(t.opts)S.opt=ov;S.optTxt=ov.filter(Boolean).join(', ');
+ try{html=await t.run(val,ov)}catch(e){ok=false;html=card('Error',`<b class="bad">${esc(e.message)}</b>`)}
  S.busy=false;S.ok=ok;S.ts=new Date();S.raw=run.list;
  if(t.ph){S.val=val;S.chk=val;S.html=html}
  if(ok&&t.ph){if(RECT.has(id))val.split(/[\s,]+/).slice(0,5).forEach(x=>{const c=ioctype(refang(x));if(c&&(c.t==='ip'||c.t==='domain'))rec.add(c.host)});hist.add({t:S.ts.toISOString(),tool:id,input:val})}
@@ -569,8 +641,9 @@ async function go(){const id=cur,t=T[id],S=STATE[id]=STATE[id]||{},val=norm(id,q
  out.innerHTML=html;if(ok)t.after?.();showBar();drawEx()}
 function pick(id,push=true){if(!T[id])id='ip';if(cur&&cur!==id)snap();cur=id;const t=T[id],S=STATE[id]=STATE[id]||{};
  $('#cats').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.c===t.cat));nav.innerHTML='';Object.entries(T).filter(([,x])=>x.cat===t.cat).forEach(([k,x])=>{const b=document.createElement('button');b.textContent=x.i+' '+x.label;b.dataset.id=k;b.classList.toggle('on',k===id);b.onclick=()=>pick(k);nav.append(b)});
- $('#ttl').textContent=t.title;$('#sub').textContent=t.sub;$('#help').innerHTML='💡 '+t.help+srcLine(id);$('#catd').textContent=CATS[t.cat][2];
- f.hidden=!t.ph;q.placeholder=t.ph||'';q.value=t.ph?(S.val||''):'';$('#hint').hidden=!(t.ph&&(HOSTN.has(id)||FIRSTN.has(id)));
+ $('#ttl').textContent=t.title;$('#sub').textContent=t.sub;$('#help').innerHTML='💡 '+t.help+srcLine(id)+'<div class="src"><button class="gem" id="gem">✨ Ask Gemini</button><span class="mut" id="gemn">Copies a short question about this tool and opens Gemini. Your inputs are not included.</span></div>';$('#catd').textContent=CATS[t.cat][2];
+ f.hidden=!t.ph;q.placeholder=t.ph||'';q.value=t.ph?(S.val||''):'';
+ ['o1','o2'].forEach((k,i)=>{const s=$('#'+k),o=t.opts?.[i];s.hidden=!o;if(o){s.innerHTML=o.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');s.value=S.opt?.[i]??o[0][0]}});$('#hint').hidden=!(t.ph&&(HOSTN.has(id)||FIRSTN.has(id)));
  REP=S.REP||'';REPN=S.REPN||'';LAST=S.LAST;drawEx();
  const hh='#'+id;if(push&&location.hash!==hh)history.pushState(null,'',hh);else history.replaceState(null,'',hh);
  if(t.ph){out.innerHTML=S.busy?'<div class="card mut"><span class="sp"></span>Checking…</div>':(S.html||'');showBar()}
@@ -588,6 +661,7 @@ abar.onclick=e=>{const b=e.target.closest('button');if(!b)return;const S=STATE[c
 out.onclick=e=>{const w=e.target.closest('[data-w]');if(w)return wAct(w);const b=e.target.closest('button'),ip=$('#bigip');if(b&&b.id==='dl')return download();if(b&&b.id==='cpg'){try{navigator.clipboard.writeText($('#cfgout').textContent);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rc'){try{navigator.clipboard.writeText(REP);b.textContent='Copied ✓'}catch{}return}if(b&&b.id==='rd')return save('triage-'+REPN+'.md',REP,'text/markdown');if(!b||!ip)return;
  if(b.id==='cp'){try{navigator.clipboard.writeText(ip.textContent);b.textContent='Copied ✓'}catch{}}
  if(b.id==='hd'){ip.classList.toggle('blur');b.textContent=ip.classList.contains('blur')?'Show IP':'Hide IP'}};
+$('#help').onclick=e=>{if(e.target.closest('#gem'))askGemini()};
 window.addEventListener('popstate',()=>pick(location.hash.slice(1),false));
 function theme(t){try{localStorage.setItem('th',t)}catch{}
  const r=document.documentElement;t==='auto'?r.removeAttribute('data-theme'):r.dataset.theme=t;

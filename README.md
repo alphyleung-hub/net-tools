@@ -3,7 +3,7 @@
 # 🌐 Net Tools
 
 **A free, open-source network and security toolbox that runs on Cloudflare's free plan.**
-IP lookup · DNS · domain mapping · BGP · subnet calculators · threat-intel triage — 31 tools in one simple page.
+IP lookup · DNS · domain mapping · BGP · subnet calculators · threat-intel triage — 35 tools in one simple page.
 
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
 ![No build step](https://img.shields.io/badge/build-none-brightgreen)
@@ -29,7 +29,7 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 
 ## ✨ Features
 
-31 tools in five categories. 🔒 = runs entirely in your browser (nothing is sent anywhere).
+35 tools in five categories. 🔒 = runs entirely in your browser (nothing is sent anywhere).
 
 ### 🏠 Connection
 | Tool | What it does | Data from |
@@ -44,7 +44,7 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 | Tool | What it does | Data from |
 |---|---|---|
 | **Domain Map** | Sub-sites, server IPs, hosting networks, colored relationship graph, **Excel export** | crt.sh, Cloudflare DNS, ipapi.is |
-| **DNS** | A, AAAA, MX, NS, TXT, CNAME, SOA and CAA records | Cloudflare DNS over HTTPS |
+| **DNS** | All record types (A, AAAA, CNAME, MX, NS, SOA, TXT, CAA, DS, DNSKEY, HTTPS) from Cloudflare or Google, each explained in plain words | Cloudflare / Google DoH |
 | **Whois** | Registrar, status locks, dates, age, name servers, contacts (domains, including .com.hk) or owner (IPs) | RDAP, WHOIS fallback |
 | **Propagation** | Ask Cloudflare, Google, Quad9 and OpenDNS at once | DNS over HTTPS |
 | **DNSSEC** | Chain of trust root → TLD → domain, DS / DNSKEY / RRSIG details, independent DS check | Google Public DNS |
@@ -55,6 +55,7 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 |---|---|---|
 | **Ping** | Latency from 10 locations worldwide | Globalping.io |
 | **Status** | Is a website up, and how fast? (up to 10 at once) | this site's Worker |
+| **Server Headers** | Raw HTTP response headers, hop by hop through redirects | this site's Worker |
 | **MTR** | Hop-by-hop route from 3 worldwide probes, color-coded loss and delay | Globalping.io |
 | **ASN Prefixes** | Every IPv4 / IPv6 prefix a network announces | RIPEstat |
 | **BGP Route** | Route visibility, origin AS and sample AS paths | RIPEstat (RIS collectors) |
@@ -63,6 +64,7 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 | Tool | What it does | Data from |
 |---|---|---|
 | **Investigate** | Paste an IP, domain, URL or hash. Get findings, pivot links and a **triage report** (copy / download) | Shodan InternetDB (IPs), urlscan.io (domains), CIRCL + VirusTotal (hashes) |
+| **VirusTotal** | Domain, IP or hash: detections, categories, DNS, certificate, WHOIS (needs `VT_API_KEY`) | VirusTotal API |
 | **Watchlist** ⭐🔒 | Save indicators in your browser, re-check with one click, export CSV | local storage |
 | **Email Security** | SPF, DKIM and DMARC with plain-language grades | Cloudflare DNS |
 | **Security Headers** | HSTS, CSP, X-Frame-Options and more, plus cookie flags | this site's Worker |
@@ -81,6 +83,8 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 | **Transfer Time** 🔒 | "How long to move 50 GB over 500 Mbps?" with overhead | browser |
 | **MAC Lookup** | Vendor of a MAC address, flags random private MACs | macvendors.com |
 | **Config Generator** 🔒 | Cisco IOS VLAN, MikroTik address-list, Linux nftables | browser |
+| **History** 🔒 | Every check with its time, exportable as CSV or JSON | local storage |
+| **More Tools** | Links to Check-Host (terminal, ping, HTTP, TCP, DNS), VirtualBytes, DNSChecker, VirusTotal | external sites |
 
 ## 🧰 Everyday conveniences
 
@@ -88,6 +92,7 @@ Network engineers, SOC analysts and curious people often juggle a dozen websites
 - **History**: every check is logged with its time (tool: History), exportable as CSV or JSON.
 - **Watchlist for every tool**: press ☆ Watch on any result and re-check it later.
 - **Recent inputs**: the last 20 IPs and domains appear as chips under "Try:", each with a × to remove it.
+- **✨ Ask Gemini**: every tool has a button that copies a short question about the tool and opens Gemini, so you can learn what it is for (your inputs are not included).
 - **Paste anything**: full URLs such as `https://www.example.com/page` are accepted; the domain is extracted automatically.
 - **Results stay put** when you switch tools, and the browser Back / Forward buttons move between tools.
 - Recent inputs, history and the watchlist live in your browser only.
@@ -158,7 +163,7 @@ All endpoints are `GET /api/<name>` and return JSON.
 |---|---|---|
 | `ip` | - | Your IP, location, ASN (from Cloudflare) |
 | `ipinfo` | `q` (IP, optional) | IP type, risk flags and score |
-| `dns` | `q` (domain) | DNS records |
+| `dns` | `q`, `t` (`ALL` or one type), `r` (`cloudflare` or `google`) | DNS records |
 | `prop` | `q`, `t` (A, AAAA, MX, NS, TXT, CNAME) | Multi-resolver propagation check |
 | `dnssec` | `q` | DNSSEC status |
 | `whois` | `q` (domain or IP) | RDAP data |
@@ -172,7 +177,9 @@ All endpoints are `GET /api/<name>` and return JSON.
 | `bgp` | `q` (IP or prefix) | BGP visibility |
 | `oui` | `q` (MAC) | MAC vendor |
 | `intel` | `q`, `t` (`ip`, `domain`, `hash`) | Shodan InternetDB / urlscan.io / CIRCL |
-| `vt` | `q` (hash) | VirusTotal (needs `VT_API_KEY`) |
+| `vt` | `q` (hash) | VirusTotal file lookup (needs `VT_API_KEY`) |
+| `vtx` | `q`, `t` (`domain`, `ip`, `hash`) | VirusTotal details (needs `VT_API_KEY`) |
+| `hdrs` | `url` | Raw response headers and redirect chain |
 | `health` | - | Shows whether optional features (VirusTotal key) are configured |
 | `cve` | `q` | CVE details, EPSS, KEV |
 | `mailsec` | `q`, `sel` (DKIM selector, optional) | SPF / DKIM / DMARC |
